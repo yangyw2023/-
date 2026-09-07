@@ -1,0 +1,1 @@
+exp_id,model_id,model_digest,arm,retriever,reranker,top_k_context,max_ctx_tokens,prompt_ver,seed,answer_accuracy,citation_accuracy,hallucination_rate,refusal_accuracy,ttft_p50,ttft_p95,latency_p50,peak_mem_gb,run_at
