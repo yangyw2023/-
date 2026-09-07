@@ -139,3 +139,37 @@
 - **决策：S1 仓库初始化验收通过。现仓库不再重复执行 `git init` / `git branch -M`；后续开工先以 `git status`、`git log` 和远端实际历史确认 checkpoint。**
 - 记录更正：上一条 `2026-09-07 补充 3 · <一句话标题>` 是 `dlog` 工具在编辑器调用失败前已追加的未填写模板，不代表任何项目决策；按 DECISIONS 只追加原则保留原文，不回删。
 - 待办：进入下一实际 checkpoint 前再次核对 Git 状态。
+## 2026-09-07 补充 N · S2 Claude Code 工作规范就位
+
+### [L3] Claude Code 项目常驻指令
+- 事实：
+  - 仓库根目录已增加 `CLAUDE.md`。
+  - 文件固化九条全链路语义约定与依赖树约束。
+  - 明确任何 component 只能依赖 `core.contracts`，组件之间互不 import。
+  - `CLAUDE.md` 已单独提交，commit `9c036b2`。
+- 依据：
+  - `CLAUDE.md`
+  - Git commit `9c036b2`
+- **决策：S2 验收通过。后续 Claude Code 实现组件时，以 `core/contracts.py` 为契约权威，并受 `CLAUDE.md` 常驻规则约束。**
+- 待办：组件实现仍须按项目 code review 纪律逐项验收。
+
+## 2026-09-07 补充 N · S3 契约冻结
+
+### [L1] 引用与评测派生产物契约冻结
+- falsified_if: 发现当前三元组不能唯一定位来源，或发现更简单且同样唯一、可审计的定位形式。
+- 事实：
+  - 引用定位采用 `(doc_id, section, pdf_page)`；`printed_page` 仅展示。
+  - `gold_chunk_ids` 属于 citation 在具体 corpus/chunking 配置上的派生映射，不再属于人工评测集。
+  - v5.3 中拒答题 citations 全为空；TR01 的 QMM 引文仅保留在 `known_distractor.source`。
+  - v5.3 机械校验：39 题 / 无 `gold_chunk_ids` / 拒答题无 citation / citation 总数 38。
+- **决策：上述语义进入 contracts v0.1.0。**
+
+### [L2] M1c 上下文与检索实验契约
+- owner_experiment: M1c
+- **决策：** 按 S3 实际拍板后的 contracts 当前值执行；参数由 M1c 数据重新校准，不把当前值视为最终产品参数。
+
+### [L3] 评测集升级至 v5.3
+- 事实：v5.2 实际文件中 38/39 记录仍含空 `gold_chunk_ids`，ML03 已无该字段。
+- **决策：** v5.3 统一移除该字段；TR01 citation 清空。
+- 验收：39 / [] / [] / 38。
+- sha256: `05614407a0e43a7f912ae17864892b0f069a22d1ad9d1ec2bfb7362150883e8b`
