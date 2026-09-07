@@ -115,3 +115,27 @@
 - 依据:
 - **决策:**
 - 待办:
+
+
+## 2026-09-07 补充 4 · S1 仓库初始化验收完成
+
+### [L3] S1 仓库初始化
+- 事实：
+  - 当前工作分支 `ship-rag` 已与 `origin/ship-rag` 对齐，并在完成本轮记录后正常提交、推送。
+  - `eval/testset_v5_2.jsonl` 已纳入 Git，且实测不受 `.gitignore` 影响。
+  - `corpus/*` 与 `raw/*` 已实测被 `.gitignore` 正确忽略。
+  - KAIVA 原始语料共 9 份 PDF / 49 MB。
+  - `raw/` 已备份至 `/Users/developer/Documents/ship-rag-raw-backup-2026-09-07`，复核为 9 份 PDF / 49 MB。
+  - `shiprag` 已在 login shell 实测：进入仓库、激活 `.venv`、设置 `PYTHONPATH`。
+  - Python 3.12.14；MLX 实测 `Device(gpu, 0)`。
+  - 岸端环境 baseline 已写入 `ENVIRONMENT.md`。
+- 依据：
+  - `git check-ignore -v`
+  - `git ls-files eval/`
+  - `ls "raw/KAIVA - Manuals/"*.pdf | wc -l`
+  - `du -sh`
+  - `zsh -lic 'shiprag; ...'`
+  - `python -c "import mlx.core as mx; print(mx.default_device())"`
+- **决策：S1 仓库初始化验收通过。现仓库不再重复执行 `git init` / `git branch -M`；后续开工先以 `git status`、`git log` 和远端实际历史确认 checkpoint。**
+- 记录更正：上一条 `2026-09-07 补充 3 · <一句话标题>` 是 `dlog` 工具在编辑器调用失败前已追加的未填写模板，不代表任何项目决策；按 DECISIONS 只追加原则保留原文，不回删。
+- 待办：进入下一实际 checkpoint 前再次核对 Git 状态。
