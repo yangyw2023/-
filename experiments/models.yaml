@@ -1,0 +1,116 @@
+# 模型与运行时资产台账
+# 状态字段只能来自实测；每个 PASS/FAIL 必须附实测依据。
+# tag 用于调用，digest 用于身份固定；不要用 tag 代替 digest。
+# 生成于 2026-09-07
+
+models:
+  - tag: qwen3:4b
+    role: candidate
+    availability: available
+    digest: "sha256:3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f"
+    size: "2.3G"
+    gate1_params_le_5b: TODO
+    gate2_llamacpp: TODO
+    gate3_license: TODO
+    gate4_multilingual: TODO
+
+  - tag: gemma3:4b
+    role: candidate
+    availability: available
+    digest: "sha256:aeda25e63ebd698fab8638ffb778e68bed908b960d39d0becc650fa981609d25"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-aeda25e63ebd698fab8638ffb778e68bed908b960d39d0becc650fa981609d25"
+    size: "3.1G"
+    gate1_params_le_5b: TODO
+    gate2_llamacpp: TODO
+    gate3_license: TODO
+    gate4_multilingual: TODO
+
+  - tag: phi4-mini:latest
+    role: candidate
+    availability: available
+    digest: "sha256:3c168af1dea0a414299c7d9077e100ac763370e5a98b3c53801a958a47f0a5db"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-3c168af1dea0a414299c7d9077e100ac763370e5a98b3c53801a958a47f0a5db"
+    size: "2.3G"
+    gate1_params_le_5b: TODO
+    gate2_llamacpp: TODO
+    gate3_license: TODO
+    gate4_multilingual: TODO
+
+  - tag: llama3.2:3b
+    role: candidate
+    availability: available
+    digest: "sha256:dde5aa3fc5ffc17176b5e8bdc82f587b24b2678c6c66101bf7da77af9f7ccdff"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-dde5aa3fc5ffc17176b5e8bdc82f587b24b2678c6c66101bf7da77af9f7ccdff"
+    size: "1.9G"
+    gate1_params_le_5b: TODO
+    gate2_llamacpp: TODO
+    gate3_license: TODO
+    gate4_multilingual: TODO
+
+  - tag: qwen3.5:4b
+    role: candidate
+    availability: available
+    digest: "sha256:81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490"
+    size: "3.2G"
+    gate1_params_le_5b: TODO
+    gate2_llamacpp: TODO
+    gate3_license: TODO
+    gate4_multilingual: TODO
+
+  - tag: granite4:tiny
+    role: candidate
+    availability: skip
+    reason: "ollama pull: model manifest file does not exist"
+    gate1_params_le_5b: TODO
+    gate2_llamacpp: TODO
+    gate3_license: TODO
+    gate4_multilingual: TODO
+
+  - tag: smollm3
+    role: candidate
+    availability: skip
+    reason: "ollama pull: model manifest file does not exist"
+    gate1_params_le_5b: TODO
+    gate2_llamacpp: TODO
+    gate3_license: TODO
+    gate4_multilingual: TODO
+
+  - tag: qwen3:32b
+    role: teacher
+    availability: available
+    digest: "sha256:3291abe70f16ee9682de7bfae08db5373ea9d6497e614aaad63340ad421d6312"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-3291abe70f16ee9682de7bfae08db5373ea9d6497e614aaad63340ad421d6312"
+    size: "19G"
+
+  - tag: bge-m3:latest
+    role: embedder
+    availability: available
+    digest: "sha256:daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c"
+    size: "1.1G"
+
+  - tag: qwen2.5:14b
+    role: other
+    availability: available
+    digest: "sha256:2049f5674b1e92b4464e5729975c9689fcfbf0b0e4443ccf10b5339f370f9a54"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-2049f5674b1e92b4464e5729975c9689fcfbf0b0e4443ccf10b5339f370f9a54"
+    size: "8.4G"
+    note: "Installed locally; not a ship-side candidate because it exceeds the <=5B constraint."
+
+  - tag: deepseek-r1:32b
+    role: other
+    availability: available
+    digest: "sha256:6150cb382311b69f09cc0f9a1b69fc029cbd742b66bb8ec531aa5ecf5c613e93"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-6150cb382311b69f09cc0f9a1b69fc029cbd742b66bb8ec531aa5ecf5c613e93"
+    size: "18G"
+    note: "Installed locally; not a ship-side candidate because it exceeds the <=5B constraint."
+
+  - tag: llama3:latest
+    role: other
+    availability: available
+    digest: "sha256:6a0746a1ec1aef3e7ec53868f220ff6e389f6f8ef87a01d77c96807de94ca2aa"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-6a0746a1ec1aef3e7ec53868f220ff6e389f6f8ef87a01d77c96807de94ca2aa"
+    size: "4.3G"
+    note: "Pre-existing local model; not currently in the S4 candidate set."

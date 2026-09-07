@@ -173,3 +173,28 @@
 - **决策：** v5.3 统一移除该字段；TR01 citation 清空。
 - 验收：39 / [] / [] / 38。
 - sha256: `05614407a0e43a7f912ae17864892b0f069a22d1ad9d1ec2bfb7362150883e8b`
+
+## 2026-09-07 · S4 模型下载与资产台账建立
+
+### [L3] S4 模型下载
+- 事实：
+  - 船端候选 `qwen3:4b`、`gemma3:4b`、`phi4-mini:latest`、`llama3.2:3b` 下载成功。
+  - 历史候选 `qwen3.5:4b` 已存在本机，本轮纳入台账但不继承旧 GATE 状态。
+  - `granite4:tiny` 下载失败：Ollama 返回 `model manifest file does not exist`，记为 SKIP。
+  - `smollm3` 下载失败：Ollama 返回 `model manifest file does not exist`，记为 SKIP。
+  - 两个失败 tag 均未自行替换。
+  - Teacher `qwen3:32b` 下载成功，blob 约 19G。
+  - Embedder `bge-m3:latest` 下载成功，blob 约 1.1G。
+  - 本机另有 `qwen2.5:14b`、`deepseek-r1:32b`、`llama3:latest`，只作为已安装资产记录，不自动进入当前船端候选池。
+- 依据：
+  - `ollama pull <tag>` 实测输出。
+  - `ollama list`。
+  - `ollama show <tag> --modelfile`。
+  - 本机 Ollama blob 路径与 digest。
+  - `experiments/models.yaml`。
+- **决策：`experiments/models.yaml` 同时承担本机模型资产台账，但用 `role` 明确区分 `candidate` / `teacher` / `embedder` / `other`；只有 candidate 使用船端 GATE-1～4 状态。**
+- **决策：S4 不根据模型名称、历史结果或方案表提前填写 GATE 状态。GATE-2/3/4 必须由对应步骤重新实测。**
+- 待办：
+  - S7 正式执行候选生成模型 GATE-2。
+  - GATE-3 执行时重新核官方许可证。
+  - Embedder 的最终船端 runtime/兼容性在后续对应实验单独验证，不把 Ollama 可用等同于船端可用。
