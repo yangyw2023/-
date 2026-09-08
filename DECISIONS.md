@@ -198,3 +198,35 @@
   - S7 正式执行候选生成模型 GATE-2。
   - GATE-3 执行时重新核官方许可证。
   - Embedder 的最终船端 runtime/兼容性在后续对应实验单独验证，不把 Ollama 可用等同于船端可用。
+
+# 2026-09-07 补充 N · teacher 的输出用途许可
+
+### [L1] 许可约束按“产出是否上船”传递，不按“自身是否部署”
+
+* falsified_if: 出现证据表明合成训练数据不构成许可意义上的“模型输出使用”，或 LoRA adapter 不被认定为受 teacher 输出条款约束的派生物
+* 事实: §12.4 原标题「不上船，不受 5B 限制」顺带免除了 GATE-3，teacher 表全是裸的 🟢/🟡 且无 `gate3_license` 列
+* 事实: teacher 的产出 → 合成训练数据 → LoRA adapter → **上船**。链条中间没有任何一处切断许可传递
+* 事实: 多个开放权重许可专门规定“用本模型输出训练/改进其他模型”的场景。Llama Community License 已知包含派生模型命名要求与 “Built with Llama” 标注义务
+* 推论（具体后果）: 若用 Llama 3.3 70B 当 teacher，学生是 Apache 2.0 的 Qwen，但上船的 adapter 可能需以 “Llama” 开头命名 —— **一个需要向法务解释的状态**
+* **决策: 判据改为“它的产出会不会上船”，不是“它上不上船”。** 新增 GATE-T1（输出用途许可，硬门）与 GATE-T2（本机可行性）
+* **决策: “不适用”必须显式写 `N/A(理由)`，不能留空。** 留空像“还没查”，N/A 是一个已做出的判断
+* 待办: LLM judge 在 M3/M5 引入时重新过这个判据 —— 产出是分数则风险低，**但若用于拒绝采样筛训练数据，产出就间接上船了**
+
+### [L2] M2 首轮用单 teacher `qwen3:32b`
+
+* owner_experiment: M3（届时若第二 teacher 过了 T1/T2，可启用双 teacher 交叉验证）
+* 事实: `qwen3:32b` 已下载、已实测 26.09 tok/s、Apache 2.0（无输出条款）
+* 依据: **干净方案零成本。** 不是权衡取舍，是免费规避一个未量化的风险
+* **决策: M2 首轮单 teacher。** 代价是失去交叉验证过滤（§12.4 理由①），那是质量增益不是正确性前提，可接受
+* **决策: Llama 3.3 70B 与 GLM-4.5-Air 降级为备选，M2 首轮不用，须先核输出条款**
+* **决策: `gpt-oss:120b` 的 `license_claim` 记 TODO，不标 🟢。** 依据: 这正是 §12.3 刚修掉的“裸绿勾”错误，不能在 teacher 表里重犯。另需实测本机吞吐 —— 63/96 GB 是边界情况，装得下 ≠ 跑得完
+* 待办: 合成数据文件记录 teacher 的 model_id / digest / license_claim / 生成日期。没有它，某个 teacher 出问题时“哪些数据受影响”只能答“全部”
+
+## 2026-09-08 · contracts v0.2.0 冻结
+
+### [L3] contracts v0.2.0 冻结
+- 事实: v0.2.0 契约会已完成；prompt 总预算与 context packing 预算已分离，`MAX_CONTEXT_TOKENS` 更名为 `MAX_PROMPT_TOKENS`，`EvalItemResult` / `results.csv` 同步使用 `max_prompt_tokens`。
+- 事实: 当前基线为 `MAX_PROMPT_TOKENS=1050`、`TTFT_BUDGET_S=10.0`、`PROMPT_OVERHEAD_RESERVE_TOKENS=200`（待 S4a.9 用主模型 tokenizer 实测替换）、`CONTEXT_PACK_BUDGET_TOKENS=765`。
+- 依据: `core/contracts.py` v0.2.0；契约 smoke test；`eval/results.csv` schema exact-match 检查。
+- **决策: contracts v0.2.0 正式冻结。后续任何契约修改继续走独立 `contract:` commit；S4a.9 对 prompt overhead 的实测替换属于已预注册 owner 的后续 L2 契约更新。**
+- 待办: S4a 选定主模型后执行 S4a.9；必须在 S8 前完成。

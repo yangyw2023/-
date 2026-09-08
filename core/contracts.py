@@ -18,6 +18,8 @@
               "L1 必须可证伪"这道闸失效，L1 就开始变成教条。
   4. 若改动影响已生成的语料或索引 → 必须重建，并在 DECISIONS 注明重建时间
 
+  # [L2] 一次性实测,非实验参数 —— 系统提示词是固定文本,token 数是量出来的不是跑出来的。
+
 本文件【绝对不交给 AI 生成或修改】。AI 可以按它实现组件，不能改它。
 
 ================================================================================
@@ -25,6 +27,10 @@
 ================================================================================
  1. 分数一律 0.0..1.0，越大越相关。BM25 原始分与向量距离必须在组件内部
     归一化后再出口。禁止某处用距离（越小越好）。
+    ⚠️ 归一化必须是【查询无关】的：一个固定的单调映射，只依赖该条 hit 的原始分，
+    不依赖本次返回的其他结果。禁止 per-query min-max / softmax ——
+    那会让 top-1 恒为 1.0（或最低项恒为 0.0），使 MIN_RELEVANCE 永远不触发
+    （或永远触发），而这个失败【不报错，只是拒答率变成 0% 或 100%】。
  2. 空列表 [] 的唯一含义是"确实没检索到"。出错一律抛异常，
     禁止 `except: return []` —— 否则"没找到"和"崩了"变成同一个状态，无法归因。
  3. 拒答不是异常。Answer(refused=True) 是合法的正常返回。
@@ -77,7 +83,7 @@ from typing import Literal, Protocol, Sequence
 
 # 索引包与运行时的一致性校验依据（见 IndexManifest）。
 # 任何影响 Chunk 结构或引用语义的改动都必须递增此版本号。
-CONTRACTS_VERSION = "0.2.0-draft"
+CONTRACTS_VERSION = "0.2.0"
 
 
 # ==============================================================================
@@ -98,7 +104,9 @@ CONTRACTS_VERSION = "0.2.0-draft"
 #   4096 tok ->  71.8 t/s -> 57.1s  ← 船端不可接受
 # 注: 该实测 backend 显示 BLAS,MTL（Metal 未完全禁用），是【乐观上界】。
 #
-# ⚠️⚠️ 【待拍板】本值与 TTFT_BUDGET_S 互相矛盾，必须在契约会上一起定。
+# 【当前基线】采用方案 C：MAX_PROMPT_TOKENS=1050 / TTFT_BUDGET_S=10.0。
+# 两者均为 L2，后续由 owner experiment 根据实测重定；M1c 同时报约 1050 与
+# 约 1500 两档 Recall，用于量化收紧 prompt 预算的代价。
 #
 # 双向核算（纪律五：能互相推导的两个数字必须显式核对一次）:
 #   用上表在 1024→2048 之间线性插值:
@@ -113,11 +121,19 @@ CONTRACTS_VERSION = "0.2.0-draft"
 #   C. 先按 A，让 M1c 测出代价 ✅推荐   两个数都是 L2/owner=M6，现在谁也不是终值；
 #                                     现在要做的不是挑一个，而是让它们自洽并把取舍量化
 #
-# 本文件按 C 预填 1050。若拍板选 B，改为 1500 并同步把 TTFT_BUDGET_S 改为 15.0。
+# 当前基线采用 C（1050 / 10s）。若后续 owner experiment 的实测支持放宽延迟预算，
+# 须通过新的契约变更同步修改 MAX_PROMPT_TOKENS 与 TTFT_BUDGET_S。
 # 无论选哪个，M1c 必须在 ~1050 与 ~1500 两档预算下各报一次 Recall。
 #
-# ⚠️ 这是【真正的约束】。TOP_K_CONTEXT 只是它的上限保护，不是它的替代品。
-MAX_CONTEXT_TOKENS: int = 1050
+# ⚠️⚠️ 这是【整个 prompt】的预算，不是 context 块的预算。
+#    llama-bench -p N 测的是 N 个【总 prompt token】的 prefill，
+#    所以 TTFT(1050)=9.8s 对应的是【整个 prompt】1050 token。
+#    旧名 MAX_CONTEXT_TOKENS 掩盖了这一点，曾导致 pack_context 把全部预算给了 chunk，
+#    系统提示词/问题/引用头/chat template 全部白送 —— 实际 TTFT 12.4s，超预算 24%。
+#    这是"数字有来源但口径没核对"的第三次，见纪律五。
+#
+# ⚠️ TOP_K_CONTEXT 只是个数上限保护，不是本值的替代品。
+MAX_PROMPT_TOKENS: int = 1050
 
 # [L2] owner_experiment: M1c（Recall@3 与 Recall@5 的差距出来后重定）
 #
@@ -133,11 +149,15 @@ MAX_CONTEXT_TOKENS: int = 1050
 #   - 组件按 relevance 降序逐个累加 token 估算
 #   - 遇到第一个装不下的即【停止，不跳过】（prefix 语义，见 pack_context）
 #   - 同时不得超过本值个数
-# 按 MAX_CONTEXT_TOKENS=1050 与 CONTEXT_PACK_BUDGET_TOKENS=945 重算:
-#   最坏情况 945 ÷ 473 ≈ 2.0 个   中位情况 945 ÷ 292 ≈ 3.2 个
-#   → 实际装 2-3 个居多；本值 5 只是上限保护，几乎不会触及
+# 按 CONTEXT_PACK_BUDGET_TOKENS=765 重算（含每块的引用头 +14 tok）:
+#   最坏情况 765 ÷ (473+14) ≈ 1.6 → 1 个
+#   中位情况 765 ÷ (292+14) ≈ 2.5 → 2 个
+#   → 实际装 1-2 个居多；本值 5 只是上限保护，几乎不会触及
+# ⚠️ 这个数比 v0.7 设想的"3 个"少得多。它是 prompt 口径修正 + 引用头计入的
+#    共同结果，【不是缺陷】—— 是之前的预算把开销白送了。
+#    真实代价由 M1c 的 Recall@1/@2/@5 量化，不靠猜。
 # 好处: chunk 偏小时不白白浪费预算。
-# ⚠️ CD01 的 gold 是 3 个 chunk 跨 2 份手册 —— 在 1050 预算下大概率装不全，
+# ⚠️ CD01 的 gold 是 3 个 chunk 跨 2 份手册 —— 在 765 chunk 预算下几乎必然装不全，
 #    这会成为 M1c 的一个真实观察（failure_tag="context_truncation"），
 #    【不要】为了让它装下而调大预算，那是为一道题优化。
 TOP_K_CONTEXT: int = 5
@@ -163,12 +183,15 @@ CHUNK_MIN_CHARS: int = 120
 CHARS_PER_TOKEN_EST: int = 4
 
 # 预算安全余量。[L2] owner_experiment: M1c
-# 按 MAX_CONTEXT_TOKENS × 本值填充，为 CHARS_PER_TOKEN_EST 的估算误差留空间。
+# 对【扣除 prompt 开销后的剩余预算】乘本值，为 CHARS_PER_TOKEN_EST 的估算误差留空间。
 # 最坏情况 945 × 1.15 = 1087 tok → TTFT 10.2s，仍在预算附近。
 CONTEXT_PACK_MARGIN: float = 0.90
 
-# 派生常量【唯一定义处】—— 组件一律用它，不要各自去乘那个 0.90。
-CONTEXT_PACK_BUDGET_TOKENS: int = int(MAX_CONTEXT_TOKENS * CONTEXT_PACK_MARGIN)
+# 每个 chunk 渲染进 prompt 时的引用头开销，形如 "[SMM §2.1 PDF p.73]"。
+# [L3] 实测替换后可降级；当前为估算。
+# ⚠️ 引用头【不是可选装饰】: 没有它模型无法给出处，Citation First 落不了地。
+#    所以它的 token 必须计入预算，见 Chunk.est_prompt_tokens()。
+CITATION_HEADER_EST_TOKENS: int = 14
 
 # ---- 生成 ----
 # [L2] owner_experiment: M6（按船端实测生成速率重定）
@@ -189,14 +212,23 @@ TTFT_BUDGET_S: float = 10.0
 # falsified_if: 出现证据表明 thinking 显著提升带出处问答的正确率且延迟可接受
 THINKING_ENABLED: bool = False
 
-# [L1] 生成采样一律关闭。
-# 来源: n=31 的规模下，几道题因为采样而翻面就能移动 6 个百分点 ——
-#       正好是实用效应闸（Δ≥19pp）的量级。四个实验臂必须完全一致，
-#       否则臂间差异里混进了采样噪声，McNemar 检验的前提不成立。
-# 与 THINKING_ENABLED 同类: 它是跨组件必须对齐的行为要求，不是某次实验的判断。
-# falsified_if: 出现证据表明贪心解码系统性劣于采样，且差异大于采样引入的噪声
-# ⚠️ 某些 MoE 后端在 temperature=0 下仍不确定。开工前必须实测:
-#    同一 prompt 跑两遍，输出逐字节相同才算通过；不通过则该模型跑 3 次取多数并注明。
+# [M] 生成采样一律关闭。
+#
+# why_not_falsifiable:
+#   约束的【本体】是"四臂的采样设置必须一致且可复现"，这是实验设计层面的
+#   混杂控制要求，不是关于本系统的经验主张，不可能被本项目的实验推翻。
+#   n=31 的规模下，几道题因采样翻面就能移动 6 个百分点 ——
+#   正好是实用效应闸（Δ≥19pp）的三分之一量级；四臂若用不同随机性，
+#   臂间差异里就混进了采样噪声，McNemar 检验的前提不成立。
+#
+#   0.0 是满足该约束【最省事的一种实现】: 输出确定，单次跑即可，不需重复采样。
+#   （用固定 seed 的 temperature=0.7 也能控住混杂，只是更贵。）
+#   所以级别标 [M] 而不是 L1 —— 标 L1 就要写 falsified_if，而它没有真正的证伪条件，
+#   那正是新增 [M] 类别想避免的情形。
+#
+# ⚠️ 【可证伪的是另一条，独立成立】: 某些 MoE 后端在 temperature=0 下仍不确定。
+#    开工前必须实测: 同一 prompt 跑两遍，输出逐字节相同才算通过；
+#    不通过则该模型跑 3 次取多数，并在报告中注明。
 GENERATION_TEMPERATURE: float = 0.0
 
 # ---- 判分（实施方案 §14.3）----
@@ -238,7 +270,58 @@ CORPUS_LANG_DEFAULT: str = "en"
 #   为一个不计分的指标去抬高阈值，是拿会计分的东西换不计分的东西。
 #   判据: 【尽量不误拒 31 道可答题】，而非最大化陷阱拒答率。
 #   拒答的正式校准（独立校准集）排到 M5 安全验收，那时它才是主角。
+#
+# ⚠️⚠️ 【判定位置必须唯一】拒答条件是:
+#
+#        max(hit.match_score for hit in retrieved_hits) < MIN_RELEVANCE
+#
+#    三处不许含糊，任一处放松都会让三个组件实现出三种语义，
+#    而分数分布图会看起来【都很合理】:
+#
+#    (a) 用 match_score，【不是】relevance。
+#        relevance 可以是 RRF 之类的纯排名分，绝对阈值对它在数学上不成立。
+#    (b) 用 max，【不是】均值、也不是进 context 的那几个的均值。
+#        问的是"语料里到底有没有够格的证据"，那是最好那条说了算。
+#    (c) 作用在 retriever 返回的【全部 hits（top-k_retrieve）】上，
+#        【在 pack_context 之前】。
+#        若作用在打包后的集合上，预算把好证据挤掉会被误读成"语料里没有证据"——
+#        两种完全不同的失败会记成同一种。
+#        被预算挤掉的情况有 failure_tag="context_truncation" 专门接着。
 MIN_RELEVANCE: float = 0.35
+
+# 非 chunk 部分的 prompt 开销预留。[L2] owner_experiment: M1c
+#
+# ⚠️⚠️ 这个数【不应该长期是估算值】。系统提示词是固定的，可以用真 tokenizer
+#    精确量一次。M1c 开跑前【必须】实测替换，并把实测值记进 DECISIONS.md。
+#    ⚠️ 当前预算余量已归零（见 CONTEXT_PACK_BUDGET_TOKENS 的核算：TTFT 10.13s）。
+#      这意味着【任何低估都会直接破预算】。若实测是 250 而非 200，整条链要重算。
+#
+# 组成（当前为估算，待实测）:
+#   系统提示词（B/D 臂，含引用与拒答指令）   80–150
+#   问题                                     15–40
+#   chat template 脚手架（role 标记、BOS）    10–20
+# ⚠️ 取【四臂中最长的那套】（B/D）。A/C 臂无 context 块、提示词更短，
+#    但预算必须按最坏情况定 —— 见"四臂 prompt 天然不同"这条已知混杂。
+# 这个取值没有校准！！
+#      实测时点: S4a 选定主模型后,用【该模型的 tokenizer】量四臂提示词初稿,
+#      立即替换本值;S10 预注册时用终稿再量一次锁死。
+#      ⚠️ 必须在 S8 之前完成 —— S8 要选 Recall 的 k 值(2 还是 3),
+#      k 由 chunk 预算决定,chunk 预算由本值决定。不先量,S8 的 k 值建立在猜测上。
+PROMPT_OVERHEAD_RESERVE_TOKENS: int = 200
+
+# 派生常量【唯一定义处】—— 组件一律用它，不要各自去算。
+# 三段式: 先扣掉 prompt 开销（可精确量，不需余量），再对剩余部分乘估算余量。
+CONTEXT_PACK_BUDGET_TOKENS: int = int(
+    (MAX_PROMPT_TOKENS - PROMPT_OVERHEAD_RESERVE_TOKENS) * CONTEXT_PACK_MARGIN
+)
+# 当前取值: (1050 - 200) × 0.90 = 765
+# 核算（纪律五：能互相推导的两个数字必须显式核算一次）:
+#   765 × 1.15（CHARS_PER_TOKEN_EST 的最坏低估）+ 200 = 1080 实际 token
+#   rate(1080) = 107.4 + (1080-1024)/1024 × (92.3-107.4) = 106.6 t/s
+#   TTFT = 1080 / 106.6 = 10.13 s
+# ⚠️ 10.13 > TTFT_BUDGET_S = 10.0。技术上仍破线，余量已归零。
+#    【不要】为了凑过线去把 CONTEXT_PACK_MARGIN 调成 0.88 —— 那是为了让数字好看而动参数。
+#    正确的反应是把 PROMPT_OVERHEAD_RESERVE_TOKENS 列为 M1c 开跑前的必测项。
 
 # [L2] owner_experiment: 回填脚本首跑报告（按 L1+L2 命中率与误命中情况重定）
 #
@@ -254,6 +337,26 @@ MIN_RELEVANCE: float = 0.35
 #     结果是【片段变少 → L1 的"全片段命中"更容易满足 → 命中率虚高】。
 #     那是一个内建在常量里的"为了让数字好看"。
 QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH: int = 20
+
+# [L2] owner_experiment: M1c（按实际 BM25 分数分布重定）
+#
+# BM25 原始分无上界，必须用【查询无关】的单调映射压进 0..1。
+# 约定用饱和函数:  match_score = s / (s + BM25_SCORE_SATURATION)
+#     s=0 → 0.0      s=k → 0.5      s→∞ → 1.0
+# 选饱和函数而非 min-max 的理由见约定 1（min-max 是查询相关的，会让 top-1 恒为 1.0）。
+# ⚠️ k 的量级依赖语料与查询长度，当前 10.0 是【猜的】，M1c 出分布后重定。
+#
+# ⚠️ 已知局限（M1c 必须诊断）: 饱和函数是【查询无关】的，但【不是查询长度无关】的。
+#    BM25 原始分随查询词数增长 —— 15 词的程序题与 3 词的事实题，
+#    同样好的匹配会给出量级不同的 s，导致固定阈值对短查询系统性更严。
+#    评测集里问题长度差异很大（多语种题 vs 10 个 required_element 的程序题）。
+#    诊断: 把 39 道题的 top-1 match_score 对【问题 token 数】做散点。
+#    若明显正相关 → 阈值在按问题长度而非证据质量分流，需改归一化（如按查询词数缩放）。
+#    现在不预先加复杂归一化 —— 那属于未测就写进架构（纪律四）。
+BM25_SCORE_SATURATION: float = 10.0
+
+# 余弦相似度不需要新常量: (cos + 1) / 2 本身就是查询无关的固定映射。
+# 该公式写进 vector.py 的 docstring，不在此处再定义一个常量。
 
 
 # ==============================================================================
@@ -374,25 +477,64 @@ class Chunk:
     source_hash: str = ""
 
     def est_tokens(self) -> int:
-        """token 估算。用于上下文预算填充，不是精确计数。
+        """本块【文本本身】的 token 估算。【不含引用头】。
 
+        用途: 分块逻辑（与 CHUNK_TARGET_TOKENS 比较）。
         契约: 恒 ≥1。当前 CHUNK_MIN_CHARS=120 保证不会出现 0，
         但类型本身没有 runtime 校验，返回 0 会让 pack_context 无限装块。
         """
         return max(1, len(self.text) // CHARS_PER_TOKEN_EST)
 
+    def est_prompt_tokens(self) -> int:
+        """本块【渲染进 prompt 后】的 token 估算。【含引用头】。
+
+        用途: pack_context 的预算填充。
+        契约: 必须计入引用头 —— 没有引用头模型就无法给出处，
+        Citation First 落不了地；而只数 text 会让每个 chunk 静默少算约
+        CITATION_HEADER_EST_TOKENS 个 token。
+
+        ⚠️ 为什么拆成两个方法而不是让 est_tokens 直接加上引用头:
+           两个消费方的需求【相反】——
+             分块逻辑问"这块文本本身多大"     → 不该含引用头
+             pack_context 问"这块进 prompt 花多少" → 该含
+           合并会让分块阈值被静默抬高 CITATION_HEADER_EST_TOKENS。
+           这与"一个数据结构不要同时干两件事"是同一条原则。
+        """
+        return self.est_tokens() + CITATION_HEADER_EST_TOKENS
+
 
 @dataclass(frozen=True)
 class Hit:
-    """一条检索结果。
+    """一条检索结果。【两个分数，各司其职】。
 
     契约:
-      - relevance 恒为 0.0..1.0，越大越相关，且【已在组件内部归一化】。
-        BM25 原始分与向量距离都不满足此约定，出口前必须转换。
+      - relevance = 【排序分】。恒 0.0..1.0，越大越相关。pack_context 依赖它降序。
+        融合检索可以用 RRF 之类的纯排名方法产生它。
+
+      - match_score = 【绝对匹配质量】。恒 0.0..1.0，且必须【查询无关】。
+        它是 MIN_RELEVANCE 拒答判定的【唯一】依据。
+          · bm25   : s / (s + BM25_SCORE_SATURATION)
+          · vector : (cos + 1) / 2
+          · rrf hybrid : 【必然与 relevance 不同】。
+            RRF 分数只由排名决定（Σ 1/(60+rank)），双路都排第一恒为 2/61 = 0.0328，
+            【无论内容是完美匹配还是垃圾匹配】。
+            → 此时 match_score 必须取【各路归一化原始分的 max】。
+              ⚠️ 锁死 max，不许用加权和。两个理由:
+                (a) 语义干净: max 的含义是"任何一路找到的最好证据有多好"，
+                    正是拒答判定要问的问题。
+                (b) 加权和会引入耦合: 融合权重是 L2 参数（M1c 要扫），
+                    让 match_score 依赖它 = 调融合权重会同时移动拒答阈值的语义，
+                    两个本该独立的旋钮被绑在一起。
+
+      ⚠️ 为什么分成两个字段: "怎么排"和"够不够好"是两个问题。
+         用一个字段同时承担，要么排序失去信息，要么阈值失去意义 ——
+         后者是【静默】的: 拒答率会直接变成 0%，不报任何错。
+
       - origin 仅用于调试归因，不参与打分
     """
     chunk: Chunk
     relevance: float
+    match_score: float
     origin: HitOrigin = "hybrid"
 
 
@@ -490,6 +632,8 @@ class GoldChunkMap:
     corpus_chunks_sha256: str
     parser_name: str              # "kaiva_pdf_v1"
     chunker_config: str           # "target350_overlap60_min120"
+    contracts_version: str        # split_quote_fragments 的切片语义一变，旧映射即作废，
+                                  # 必须可追溯是用哪版契约生成的
     built_at: str                 # ISO 8601
     mapping: dict[str, list[str]]           # question_id -> [chunk_id, ...]
 
@@ -568,8 +712,8 @@ class EvalItemResult:
     reranker: str               # 未引入时填 "none"，见 Reranker 的说明
     top_k_retrieve: int
     top_k_context: int
-    max_ctx_tokens: int
-    pack_budget_tokens: int              # = MAX_CONTEXT_TOKENS × CONTEXT_PACK_MARGIN
+    max_prompt_tokens: int               # 原名 max_ctx_tokens，见 MAX_PROMPT_TOKENS 的口径说明
+    pack_budget_tokens: int              # = CONTEXT_PACK_BUDGET_TOKENS（三段式派生）
     temperature: float                   # 四臂必须一致，见 GENERATION_TEMPERATURE
     prompt_config_sha256: str
     testset_sha256: str
@@ -749,6 +893,11 @@ def validate_answer(answer: Answer) -> None:
         if not answer.reason:
             raise ContractViolation("refused=True 时 reason 必须非空")
         return
+    # 到这里 refused=False，无论哪个臂都必须有答案内容
+    if answer.text is None:
+        raise ContractViolation(
+            "refused=False 时 text 不得为 None：既没拒答也没答案是非法状态"
+        )
     if answer.arm in ("A", "C"):
         return  # 无检索层，天然无 citations
     if not answer.citations:
@@ -767,11 +916,15 @@ def pack_context(hits: Sequence[Hit],
       - 按顺序逐个累加 token 估算，【遇到第一个装不下的即停止，不跳过】
       - 同时不超过 max_chunks 个
       - 真正的约束是 max_tokens；max_chunks 只是上限保护
-      - 至少返回一个 hit（若首个 hit 本身就超预算，仍返回它并由上游截断，
+      - 【hits 非空时】至少返回一个（若首个 hit 本身就超预算，仍返回它并由上游截断，
         因为返回空会被误读为"没检索到"，违反约定第 2 条）
+      - hits 为空时返回 []，那是约定第 2 条意义上的"确实没检索到"，是正常状态
       - 被预算挡在外面的 hit 数量应由调用方记入 failure_tag="context_truncation"
-      - 默认预算是 CONTEXT_PACK_BUDGET_TOKENS（已含安全余量），不是
-        MAX_CONTEXT_TOKENS。传参时也不要自己去乘 CONTEXT_PACK_MARGIN。
+      - 默认预算是 CONTEXT_PACK_BUDGET_TOKENS（已扣掉 prompt 开销并含安全余量），
+        【不是】 MAX_PROMPT_TOKENS。传参时也不要自己去减开销或乘余量。
+      - 用 chunk.est_prompt_tokens()（含引用头），不是 est_tokens()。
+      ⚠️ 本函数【不做】拒答判定。拒答由 pipeline 在【打包之前】、
+        对 retriever 返回的全部 hits 用 max(match_score) 判，见 MIN_RELEVANCE。
 
     为什么是 prefix 而不是 skip-and-fill（跳过装不下的、继续试后面的短块）——
     两个理由，第二个更硬:
@@ -792,7 +945,7 @@ def pack_context(hits: Sequence[Hit],
     packed: list[Hit] = []
     used = 0
     for hit in hits[:max_chunks]:
-        t = hit.chunk.est_tokens()
+        t = hit.chunk.est_prompt_tokens()
         if packed and used + t > max_tokens:
             break          # prefix 语义：停止，不 continue
         packed.append(hit)
@@ -843,7 +996,10 @@ class Retriever(Protocol):
         """检索。
 
         契约:
-          - 返回 0..k 个 Hit，按 relevance 降序；relevance 恒 0..1 已归一化
+          - 返回 0..k 个 Hit，按 relevance 降序
+          - 【必须同时填 relevance 与 match_score】，两者恒 0..1。
+            match_score 的归一化必须【查询无关】（见约定 1 与 Hit 的契约）——
+            禁止 per-query min-max / softmax，那会让拒答机制静默失效
           - query 为空或全空白 → 返回 []（有意义的"确实没有"，不是异常）
           - 索引损坏、后端不可达 → 抛 RetrievalError，禁止静默返回 []
           - 【禁止】在本层做拒答判断。拒答由 pipeline 依据 MIN_RELEVANCE 决定
@@ -932,37 +1088,85 @@ class Generator(Protocol):
 
 
 # ==============================================================================
-# 本版（0.2.0-draft）相对 0.1.0 的改动 —— 契约会上逐条确认
+# 本版（0.2.0）相对 0.1.0 的冻结改动记录
 # ==============================================================================
-# 【硬错误，必须改】
-#  1. MAX_CONTEXT_TOKENS 1500 → 1050。原值与 TTFT_BUDGET_S=10 互相矛盾
-#     （1500 tok 实测插值 TTFT=14.9s）。本文件按方案 C 预填，待拍板。
-#  2. GoldChunkMap.match_levels 删除。实测 6 道题带多条 citation，
-#     question-level 压缩会丢掉"哪一条要复核"。审计权威改为 report.csv。
-#  3. pack_context docstring 自相矛盾（标题说"按预算填充"、细则说"立即停止"、
-#     代码是 break）。锁定为 prefix 语义并重写。
+# 【P1 阻断】relevance 与 match_score 分离
+#    问题: 约定 1 只说"归一化到 0..1"，没说【怎么】归一化。两条静默失败路径:
+#      ① per-query min-max → top-1 恒为 1.0 → MIN_RELEVANCE 永远不触发 → 拒答率 0%
+#      ② RRF 融合的分数只由排名决定（双路都第一恒为 2/61=0.0328），
+#         完美匹配与垃圾匹配完全一样 → 绝对阈值对 hybrid 臂数学上不可能生效
+#    而 hybrid 恰恰最可能被选为 M2 主配置。这会让 Citation First 这条 L1
+#    在最关键的那一臂上名存实亡，且不报任何错。
+#    改: 约定 1 加"查询无关"要求；Hit 加 match_score；hybrid 锁死用 max（不许加权和）；
+#        MIN_RELEVANCE 写死判定的三个要素（用 match_score / 用 max / 作用在检索集上）；
+#        新增 BM25_SCORE_SATURATION。
 #
-# 【失效的注释，必须改】
-#  4. CHARS_PER_TOKEN_EST 从 L3 升 L2。"误差不影响结论"在它开始驱动
-#     pack_context 之后失效。新增 CONTEXT_PACK_MARGIN=0.90 与派生的
-#     CONTEXT_PACK_BUDGET_TOKENS。
-#  5. MIN_RELEVANCE 的优化方向反转: 取保守偏低值，判据是"尽量不误拒 31 道
-#     可答题"，而非"最大化陷阱拒答率"。两边代价不对称（前者进主指标，后者不进）。
+# 【P2 阻断】1050 是 prompt 预算，不是 context 块预算
+#    问题: llama-bench -p N 测的是 N 个【总 prompt token】。旧实现把 945 全给了 chunk，
+#    系统提示词/问题/引用头/chat template 白送。核算 945×1.15+200=1287 → TTFT 12.4s，
+#    超预算 24%。这是"数字有来源但口径没核对"的第三次。
+#    改: MAX_CONTEXT_TOKENS → MAX_PROMPT_TOKENS；新增 PROMPT_OVERHEAD_RESERVE_TOKENS=200；
+#        CONTEXT_PACK_BUDGET_TOKENS 改三段式 =(1050-200)×0.90=765；
+#        新增 CITATION_HEADER_EST_TOKENS=14；est_tokens 拆成两个方法；
+#        EvalItemResult.max_ctx_tokens → max_prompt_tokens。
 #
-# 【补漏】
-#  6. 新增 GENERATION_TEMPERATURE = 0.0 [L1]。原文件从未规定采样，
-#     n=31 下采样噪声足以移动 6pp。
-#  7. EvalItemResult 新增 n_chunks_in_context / actual_context_tokens /
-#     pack_budget_tokens / temperature；gold_chunk_hit 改 bool|None
-#     （A/C 臂无检索层，理由同 citations_correct）。
-#  8. IndexManifest 新增 embeddings_sha256，并写明【向量与 chunk 的行序对应】
-#     是最关键契约 —— 向量错位时检索看起来正常但全是乱的，且不报错。
-#  9. Chunk.est_tokens 加 max(1, ...) 下界，防 pack_context 无限装块。
-# 10. 头部级别说明新增 [M] 方法约束类别。
+# 【P3】GENERATION_TEMPERATURE 从 [L1] 改为 [M]
+#    它没有真正的证伪条件，标 L1 就要写 falsified_if —— 那正是新增 [M] 想避免的情形。
+#    措辞同时厘清: 不可证伪的是"四臂采样设置必须一致且可复现"，
+#    0.0 只是满足它最省事的一种实现。
 #
-# 【待你拍板（本文件已预填推荐值，不同意就改）】--全部暂时同意
-#  A. MAX_CONTEXT_TOKENS / TTFT_BUDGET_S 取 1050/10（推荐）还是 1500/15
-#  B. CONTEXT_PACK_MARGIN 取 0.90 是否够
-#  C. GENERATION_TEMPERATURE 进契约（而非留在预注册）是否合适
-#  D. EvalItem 是否确认纳入本文件（纳入 = 评测集格式变更也要走契约仪式）
-#  E. QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH = 20 是否接受
+# 【P4】三处 docstring 与字段修正
+#    · validate_answer 补 text is None 检查
+#      （原实现下 arm="A" + text=None + citations=[] + refused=False 会通过校验，
+#        那是"既没拒答也没答案"的非法状态）
+#    · pack_context 的"至少返回一个"限定为"hits 非空时"
+#    · GoldChunkMap 补 contracts_version（切片语义一变旧映射即作废，需可追溯）
+#
+# 【P5】冻结时 CONTRACTS_VERSION 去掉 "-draft"
+#    它会写进 IndexManifest → 索引包 → EvalItemResult → M2 预注册。
+#    带 -draft 的版本号出现在冻结后的实验记录里，本身就是个错误信号。
+#
+# ==============================================================================
+# 契约会建议顺序（P1/P2 会连带改 Hit/Chunk/常量名，P2 的改名会动 RESULTS_COLUMNS）
+# ==============================================================================
+#   1. 先定 A: MAX_PROMPT_TOKENS = 1050 还是 1500   → 决定 P2 的所有数字
+#   2. 走 P2: 改名 + 三段式分解 + est_tokens 拆两个方法
+#            → 动 RESULTS_COLUMNS。趁 results.csv 只有表头，【零成本】；
+#              M2 开跑后再改就要动已落盘的数据
+#   3. 走 P1: Hit 加 match_score + hybrid 锁死 max + 判定作用域写死
+#            → 动 components 的接口
+#   4. P3 / P4 独立小修
+#   5. CONTRACTS_VERSION → "0.2.0"
+#   6. contract: 前缀单独 commit + DECISIONS 逐条入库
+#
+# ==============================================================================
+# 待拍板（本文件已预填推荐值，不同意就改）
+# ==============================================================================
+#  A. MAX_PROMPT_TOKENS / TTFT_BUDGET_S 取 1050/10（推荐）还是 1500/15
+#     ⚠️ 按 P2 分解后，1050 是 prompt 预算，chunk 只剩 765 —— 代价比原估的更大。
+#        【这正是要量化的东西，不是改回 1500 的理由。】
+#        M1c 的两档 Recall 要按 chunk 预算 765 / 1170 扫，不是 1050 / 1500。
+#  B. CONTEXT_PACK_MARGIN = 0.90
+#     核算后 TTFT = 10.13s，仍破 10.0 线，余量已归零。
+#     【不要】为凑过线把它调成 0.88 —— 正确做法是把
+#     PROMPT_OVERHEAD_RESERVE_TOKENS 列为 M1c 开跑前的必测项。
+#  C. GENERATION_TEMPERATURE 进契约（判据: 组件之间必须对齐才能互操作）
+#  D. EvalItem 纳入本文件（代价: 评测集格式变更也要走契约仪式）
+#  E. QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH = 20 作起始值
+#  F. BM25_SCORE_SATURATION = 10.0 作起始值
+#
+# ==============================================================================
+# 配套的 M1c 诊断（写进执行手册，不进契约）—— 两条都不过则 M1c 的拒答数据是废的
+# ==============================================================================
+#  诊断 1「归一化是不是 per-query」:
+#    跑两个语义完全不同的 query（一个必然命中、一个必然不命中），比 top-1 match_score。
+#      两者都 ≈ 1.0 → 归一化是 per-query 的，拒答机制已死，回去改
+#      两者明显不同 → 通过
+#    对 hybrid 额外查: relevance 与 match_score 是否为同一个数组。
+#      是 → RRF 被直接当成了 match_score，阈值不可能生效。
+#
+#  诊断 2「match_score 是否被问题长度带偏」:
+#    把 39 道题的 top-1 match_score 对【问题 token 数】做散点。
+#      明显正相关 → 阈值在按问题长度而非证据质量分流，需改归一化。
+#    理由: 饱和函数是查询无关的，但【不是查询长度无关】的 ——
+#    BM25 原始分随查询词数增长，而评测集里问题长度差异很大。
