@@ -1,0 +1,15 @@
+# 判断标准：能一条命令重新生成的 → 不进 Git，但生成脚本必须进。
+# 唯一例外：eval/testset_*.jsonl 是人工产物、不可再生，必须进 Git（故此处不列 eval/）。
+
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+raw/*
+!raw/.gitkeep
+corpus/*
+!corpus/.gitkeep
+index/*
+!index/.gitkeep
+models/*
+!models/.gitkeep

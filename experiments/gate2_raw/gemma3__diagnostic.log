@@ -1,0 +1,9 @@
+0.00.274.135 E llama_model_load: error loading model: error loading model hyperparameters: key not found in model: gemma3.attention.layer_norm_rms_epsilon
+0.00.274.138 E llama_model_load_from_file_impl: failed to load model
+0.00.274.166 E common_fit_params: encountered an error while trying to fit params to free device memory: failed to load model
+0.00.470.598 E llama_model_load: error loading model: error loading model hyperparameters: key not found in model: gemma3.attention.layer_norm_rms_epsilon
+0.00.470.600 E llama_model_load_from_file_impl: failed to load model
+0.00.470.602 E cmn  common_init_: failed to load model '/Users/developer/.ollama/models/blobs/sha256-aeda25e63ebd698fab8638ffb778e68bed908b960d39d0becc650fa981609d25'
+0.00.470.604 E srv    load_model: failed to load model, '/Users/developer/.ollama/models/blobs/sha256-aeda25e63ebd698fab8638ffb778e68bed908b960d39d0becc650fa981609d25'
+0.00.470.912 E srv  llama_server: exiting due to model loading error
+llama_server exited with code 1
