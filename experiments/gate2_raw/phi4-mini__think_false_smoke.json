@@ -1,0 +1,25 @@
+{
+    "model": "phi4-mini:latest",
+    "created_at": "2026-09-08T08:16:56.336297Z",
+    "response": "OK",
+    "done": true,
+    "done_reason": "stop",
+    "context": [
+        200021,
+        25968,
+        483,
+        9707,
+        25,
+        11339,
+        200020,
+        200019,
+        5175
+    ],
+    "total_duration": 147789166,
+    "load_duration": 2668666,
+    "prompt_eval_count": 8,
+    "prompt_eval_cached_count": 1,
+    "prompt_eval_duration": 129388000,
+    "eval_count": 2,
+    "eval_duration": 8487000
+}
