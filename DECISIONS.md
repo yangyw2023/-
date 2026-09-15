@@ -559,3 +559,177 @@
   S4a.9 prompt-budget 校准 .... OPEN，S8 之前完成
   S4b candidate-space survey .. OPEN，不阻塞
   ```
+
+  ## 2026-09-11 · 工具职责与 S4a.9 冻结边界
+
+### [L3] LM Studio 纳入 S4b，职责限定为「候选发现 + GGUF 获取 + provenance 调查」
+- 事实：当前 `gemma3:4b` 与 `qwen3.5:4b` 的 llama.cpp 加载失败只能绑定到
+  已测试的具体 artifact + runtime；现有 Ollama blob 的取得渠道已知，
+  但**不能仅凭其位于 Ollama blob store 推断 GGUF 的转换者或发布者**
+- 事实：LM Studio 支持从 Hugging Face 搜索并下载 GGUF（`lms get <repo>`、
+  `lms get <repo>@Q4_K_M`、`lms import`），本地按 `publisher/model/file.gguf`
+  组织；其自身带独立的 llama.cpp / MLX runtime
+- **决策：纳入 S4b，职责严格限定为「候选发现、GGUF 获取、artifact provenance 调查」**
+- **决策：`source_repo_verified` 与 `artifact_provenance` 分开记录。**
+  从某个 `publisher/repo` 下载**不自动**证明该 GGUF 的转换链已验证 ——
+  LM Studio Hub 的 `model.yaml` 可以引用别的 base/source
+  （官方示例：一个 `qwen/...` 的定义指向 `lmstudio-community/...-gguf`）。
+  **命令里的命名空间 ≠ 文件的来源**
+- **决策：provenance 的验证动作是 digest 比对**：
+  `shasum -a 256 <本地.gguf>` 对照模型所有者 HF 仓库文件页显示的 SHA256
+  （LFS 文件的 OID 即 sha256）。
+  一致 → 该文件与该 publisher 发布的字节完全相同 → `artifact_provenance: verified`；
+  不一致 → 是另一个 build，provenance 仍未知，但**排除了"官方原件"**。
+  ⚠️ 精确地说，它验的是「这个文件就是仓库 X 发布的那一份」，
+  不是「仓库 X 亲手转换的」
+- **决策：只有 `artifact_provenance: verified` 之后，才允许赋
+  `source_trust: official / upstream / community`**
+- **决策：LM Studio 内运行成功【不得】作为 GATE-2 PASS。**
+  它自带独立的 llama.cpp 构建，且 Apple Silicon 上可能走 MLX 路径 ——
+  与 §6.2 错误 #4「Ollama 能跑 ≠ llama.cpp 能跑」同形。
+  正式 GATE-2 仍用项目 pin 住的 runtime，并记 artifact sha256 与 runtime scope
+- **决策：不采用其内置 RAG**（自己分块，不接收外部 chunk ID、不保留
+  `(doc_id, section, pdf_page)` → 三元组产生不出来）；
+  **不以它替换当前推理栈**（会使 `rt-2026-09-08` 下全部 GATE-2 结论作用域失效）
+- **更正：审核脑此前在工具评估中写「`lmstudio-community/*` 加载失败只能记
+  INCONCLUSIVE」，这引用的是已被推翻的旧 §12.5 规则。**
+  按现行解耦规则：**加载失败就是该 artifact + runtime 的 FAIL；
+  provenance 只限制这个 FAIL 能外推多远**
+- 待办（S4b，非阻塞）：`lms get smollm3 --gguf` / `lms get granite --gguf`，
+  补上两个 tag 缺失候选的 acquisition route
+- 待办（S4b，非阻塞）：gemma3 / qwen3.5 的独立 GGUF 二次取源复测；
+  优先选 provenance 可核实的模型所有者 artifact。
+  **可先只比 digest**，就能回答「Ollama 那份是不是官方原件」
+
+### [L3] Unsloth Studio 暂不进入 M2 训练关键路径
+- 事实：M2 的训练与评测要求显式保留 `lora_adapter_sha256` / `teacher_digest` /
+  `prompt_config_sha256` / `seed` / `code_commit` 等可复现性指纹
+- 推论：在 MLX-LM 命令行训练路径已可用的前提下，引入 GUI 训练工具
+  只有在提供额外、可验证的能力时才有收益；
+  **否则会增加配置状态捕获与复现的成本** ——
+  命令行训练脚本本身就是配置记录，进 Git、可 diff、可复现；
+  无代码 GUI 把配置藏进自己的状态里
+- 事实：Unsloth **核心**依赖 Triton，而 Mac 没有 Triton ——
+  这正是方案 §15 选 MLX-LM 的由来。**Unsloth Studio 是另一个产品**，不要混为一谈
+- 事实：官方文档自相矛盾（Requirements 页称 Mac 训练全支持；
+  快速开始 / GitHub 把训练列为 NVIDIA/Intel、CPU 仅推理）。**须自行打开确认**
+- 事实：社区项目 `mlx-tune`（原名 `unsloth-mlx`）**不是官方项目**
+- **决策：当前不进入 M2 训练关键路径，不阻塞 S4a.9 / S5 / S6 / S8**
+- **决策：S11 前重新评估其在【合成训练数据人工质检】上的窄职责，
+  而不是默认把它当训练 runtime。** §14.5 要求合成数据含 ≥20%「应拒答」负样本，
+  那批数据需要人工抽检 —— **那是数据质检的需求，不是训练的需求**
+- 待办：届时判据为「是否显著改善合成数据的浏览、筛选、标注与审计，
+  同时不破坏可复现性」
+
+### [M] 未测量的变量不得用猜测上界伪装成已关闭的门
+- why_not_falsifiable：这是证据解释与实验设计的纪律，
+  不是关于某个模型或参数的经验主张，不可能被本项目的实验推翻
+- 事实：S4a.9 中，真实 rendered chunk 的块间 separator token 成本
+  **尚未在其真实左右文中测量**；孤立换行符的 token 增量
+  **不能等价为**真实块间 separator 成本（tokenizer 会合并连续换行；
+  真实 separator 两边有 citation header 与 chunk 文本，分词不同）
+- 事实：审核脑曾为该未测量项猜一个上界（"约 1–3 tok，再留一倍"= 5），
+  并把 `slack ≥ 5` 写成硬门。该门**不产生新信息**
+  （它"失败"的原因已知）**也不导出新动作**（处置已写好）
+- **决策：对尚未测量但会影响结论的变量，结论必须写成关于该变量的条件式，
+  不为其猜一个上界再把该上界当硬门**
+- 具体到当前预算：设 `X` 为 prompt 总预算、`O` 为已实测固定开销、
+  `B` 为 context packing budget、`ERR` 为现行估算误差因子，则
+  `slack = X − (B × ERR + O)`。
+  **`k_est = 2` 成立仍要求真实块间 separator 成本 ≤ slack**；
+  该成本由 S5 的真实 rendered chunk 实测。**在实测前不猜其上界**
+- ⚠️ 读法是**单向**的：`sep > slack` → k=2 一定死（这个方向是硬的）；
+  `sep ≤ slack` → k=2 还活着但**未确定**，`CHARS_PER_TOKEN_EST` 的校准仍可能翻掉它
+- 待办：S5 后以真实 chunk 执行 9c-final 与 separator 测量，再冻结 S8 的主 k 值
+
+### [L3] 方法论：第 14 类错误的第五次实例，及其共同发生位置
+- 事实（第五次实例）：审核脑由「LM Studio 的本地路径含 publisher」
+  推出「`artifact_provenance: verified`」。
+  但路径里的 publisher **只证明获取命名空间**，不证明转换者、量化者或权重血缘 ——
+  LM Studio Hub 的 `model.yaml` 可引用别的 base/source
+- 事实（五次实例的清单）：
+  ① `BLAS,MTL` banner → "`-ngl 0` 没生效"
+  ② `think=True` 返回 HTTP 400 → "不可能把推理泄进答案"
+  ③ 缺失元数据字段 → "极可能是 Ollama 转换环节未写入"
+  ④ 孤立换行的 token 增量 SEP → "应并入 `CITATION_HEADER_EST_TOKENS`"
+  ⑤ 本地路径含 publisher → "`artifact_provenance: verified`"
+- **推论（这次的新发现）：五次的共同点不是"疏忽"，而是【位置】——
+  全部发生在「把观察写成一个字段值或一条规则」的那一刻。**
+  测量本身没错，分析也没错，错的永远是落笔那一下
+- **决策：把检查放在落笔处，而不是"以后注意"** ——
+  **每当要写 `field: value` 或"所以应该改 X"时，问一句：
+  「我观察到的那个量，和我要填的这个字段，是同一个东西吗？」**
+  五次实例里，五次的答案都是"不是"
+- **决策：该问句加入 §6.2 第 14 类错误的改进措施栏，
+  并作为「审查五问」的第 6 问**
+
+### [L2] S4a.9 的预算冻结尚未完成
+- owner_experiment: S4a.9（9a-bis）与 S5 后的 9c-final
+- 事实：phi4-mini 的 fine sweep 已提供 `MAX_PROMPT_TOKENS` 的校准证据；
+  系统提示词 + 问题的初测（9a）已完成，
+  但 **B/D 实际 rendering framework 开销 F 尚需 9a-bis 单独计入** ——
+  9a 量的是 A/C 形状（`SYSTEM + "\n\n" + question`），不含 context 块框架
+- 事实：`CHARS_PER_TOKEN_EST` 直接进入 `Chunk.est_tokens()` →
+  `pack_context()` → 最终可装 chunk 数，
+  **因此不是仅影响解释强度的旁支参数，而是承重变量**
+- 事实：审核脑此前把 9c 定位为「provisional、只影响解释强度」，**该定位低估了它**
+- **决策：在 9a-bis 与 S5 后的 9c-final 完成前，
+  不宣布最终 `CONTEXT_PACK_BUDGET_TOKENS`，不宣布 S8 的主 `k` 已冻结**
+- **决策（重申预先声明）：若最终实测只支持 `k=1`，接受该结果，
+  交给 M1c 的 Recall@1 / Recall@2 量化代价；
+  不得通过事后放宽 margin、抬高 prompt budget 或压低实测 overhead 把结果凑成 `k=2`**
+- **决策：S5 Parser 现在并行启动。** 它不依赖预算冻结，
+  且其产出正是 9c-final 所需（真实 chunk 长度分布 / 真实 rendered chunk /
+  真实 separator 上下文 / phi4-mini tokenizer 下的真实 chars/token）
+- 待办：9a-bis → 9c-provisional，与 S5 并行；S5 后 9c-final → 9d →
+  独立的 `contract:` commit → 解锁 S8
+- 待办：`_s4a9b_ttft_fine.log` 需确认已进 Git（磁盘上存在 ≠ 已跟踪）。
+  基准日志是**不可再生的测量记录**，按 §19.2 必须版本控制
+
+### [L3] BACKLOG：实施方案 §12.5 需与 provenance 解耦规则同步
+- 事实：§12.5 现行文本把 `source_trust` 三档与 GATE-2 的 FAIL 强度绑定
+- 事实：2026-09-08 已决定把两者解耦 ——
+  GATE-2 的 PASS/FAIL 永远只关于 artifact + runtime 的实测事实；
+  provenance 是独立维度，只决定该失败能外推多远；
+  且 provenance 未核实时不赋 `source_trust`
+- 推论：**台账与规范已不一致**（改了实现没改规范）
+- **决策：记入 BACKLOG，不阻塞 9a-bis / S5。**
+  §12.5 改写为：
+  ```
+  GATE-2 FAIL        = 永远只关于 artifact + runtime 的实测事实
+  artifact provenance = 独立维度
+  provenance verified   → 才允许赋 source_trust
+  provenance unverified → 不赋 source_trust
+  要把 artifact 级失败提升为「model × runtime」的更强负面证据
+                      → 换 provenance 已知的独立 artifact 复测
+  ```
+
+  ### [L3] S4a.9a-bis：B/D context framing 开销实测
+- 事实（phi4-mini:latest tokenizer；问题固定为 FL06，9a 实测其为本评测集 token 最长问题）：
+  - A/C 形状（SYSTEM + 问题）= 201 tok
+  - B/D 形状（增加 Passages / Question 框架）= 206 tok
+  - framing overhead F = 5 tok
+  - SEP（无 chunk 上下文中增加一个换行的 token 增量）= 0 tok
+- **决策：当前 provisional `PROMPT_OVERHEAD_RESERVE_TOKENS = 206`。**
+  该值尚未冻结进 contracts；最终预算仍受真实 chunk tokenization 与真实块间 separator 约束。
+- **决策：SEP=0 仅是诊断观察，不得解释为“真实块间 separator 成本为 0”。**
+  两者测量对象不同；真实 separator 必须在 S5 的 rendered chunk 上测量。
+- 派生核算（provisional，不写入 contracts）：
+  - `B = int((950 - 206) × 0.86) = 639`
+  - `worst = 639 × 1.15 + 206 = 940.85`
+  - `slack = 950 - 940.85 = 9.15 tok`
+  - 按当前 `306 tok/chunk` 估算，中位 `k_est = 2`
+- **决策：`CONTEXT_PACK_MARGIN=0.86` 的候选依据改为显式数学约束。**
+  在两位小数粒度下，为满足 `m <= 1/1.15 = 0.8696`，最大允许值为 `0.86`。
+  `0.87` 在实测 `O=206` 输入下核算为 `950.05 > 950`，不满足预算自洽条件。
+  此前在 `O=201` 下得到 `949.65 <= 950` 是整数截断造成的边界现象，不应据此采用 `0.87`。
+- **决策：`k_est=2` 不冻结。**
+  当前中位 chunk 条件要求真实 chars/token 约大于 3.82，而 `CHARS_PER_TOKEN_EST=4`
+  尚未由真实 chunk 校准；真实 separator 成本亦未测。两项均由 S5 后的 9c-final 关闭。
+- **决策：realized k 是逐题运行结果，不是全局常数。**
+  `TOP_K_CONTEXT` 仍只是个数上限；实际进入上下文的数量由预算与 chunk 长度共同决定，
+  并通过 `EvalItemResult.n_chunks_in_context` 落盘。
+- 待办：S5 后对真实 chunk 与真实 rendered context 执行 9c-final，再执行 9d；
+  在此之前不修改预算相关 contracts 常量，不宣布 S4a.9 CLOSED。
+
+  
