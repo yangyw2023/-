@@ -1,0 +1,421 @@
+# 模型与运行时资产台账
+#
+# 【纪律】
+#   1. 状态字段只能来自实测。每个 PASS / FAIL 必须附实测依据与日期。
+#   2. tag 用于调用，digest 用于身份固定。不要用 tag 代替 digest。
+#   3. tag 里的数字不是参数量证据（MoE 的 tag 常标激活参数）。params 必须有来源。
+#   4. acquisition（能不能拿到）与 gate（拿到后过没过门）是两套字段，永不混用。
+#      `ollama pull` 失败记在 availability / reason，不记为任何 GATE failure。
+#   4b. artifact_provenance 记录「这一份 artifact 的生成链是否已核实」。
+#       `channel: ollama` 只证明本轮通过 Ollama 取得，【不能推出】GGUF 由谁转换 ——
+#       Ollama 支持直接导入外部 GGUF。未核实即记 unverified。
+#       GATE-2 的 PASS / FAIL 与 provenance 解耦：
+#       failure 永远只对该 artifact 成立；要判断是否关于模型架构，
+#       须换一个 provenance 已知的 artifact 复测。
+#       仅当 artifact_provenance: verified 时，才可另加 source_trust 分级。
+#   5. GATE-2 的 PASS / FAIL 只绑定「这一份 artifact + 这一版 runtime」，
+#      不外推为该模型架构永久兼容或永久不兼容。
+#   6. license_claim 是「某日在某来源看到的声明」，不是已核验状态。
+#      gate3_license 一律 TODO，直到正式 GATE-3 执行。
+#
+# 【四道门】按顺序执行，任一不过即淘汰。性能只在全部过门者之间当 tie-breaker。
+#   GATE-1 参数    总参数 ≤ 5B（MoE 按总参数计）
+#   GATE-2 运行时  llama.cpp 可加载并跑出 bench
+#   GATE-3 许可    商用可接受（需人工核官方来源）
+#   GATE-4 多语种  排除性烟雾测试，判据为「回答是否使用提问所用的语言」
+#
+# 生成于 2026-09-07，S4a 实测结果于 2026-09-08 写入
+
+
+# ==============================================================================
+# 运行时作用域 —— GATE-2 结论的限定条件
+# 复数键名：M3 / M6 会有新的 runtime，届时新增一个键即可，不改 schema
+# ==============================================================================
+runtime_scopes:
+  rt-2026-09-08:
+    llama_cpp: "0.4.0 build 10809 commit 5266f24da"
+    ggml: "0.23.0"                 # 本机 Cellar 内另有 0.20.0；实测加载的是 0.23.0
+    ollama: "0.33.3"
+    os: "macOS 15.6 (24G84) arm64"
+    hardware: "Mac Studio M3 Ultra, 96GB unified memory"
+    bench_args: "-ngl 0 -t 8"
+    cpu_only_verified: true
+    cpu_only_evidence: |
+      同一 artifact llama3.2:3b (dde5aa3f…) 三组对照，pp512 / pp1024 / pp1200：
+        -ngl 0          117.05 / 107.17 / 101.87
+        --device none   116.65 / 106.87 / 101.59
+        -ngl 99        2554.33 / 2499.06 / 2440.03
+      -ngl 99 的 pp1024 为 -ngl 0 的 23.3 倍 → 该旋钮在本 runtime 下确实能区分
+      GPU 路径；因此 -ngl 0 与 --device none 的一致性构成「未 offload」的证据。
+      注：三种方式启动时均加载并初始化 Metal backend，banner 均为 BLAS,MTL —— 
+      backend 被加载/初始化本身不能证明发生了 GPU offload。
+    scope_note: |
+      ⚠️ 本条证明的是【无 GPU offload】，不是【这些数字适用于船端】。
+      -ngl 0 路径仍包含 BLAS（Apple Accelerate）；船端 x86 无 Accelerate、
+      也无 Apple 统一内存带宽。M0（2026-08-17）估算 x86 CPU 为 35–85 t/s，
+      对比本机的 117 t/s。船端外推仍然乐观，原因是 Accelerate 与内存带宽，
+      不是 Metal。
+
+
+models:
+
+  # ============================================================================
+  # M2 主模型
+  # ============================================================================
+  - tag: phi4-mini:latest
+    role: candidate
+    m2_primary: true                 # M2 实验载体。role 保持 candidate，不改语义
+    availability: available
+    family_key: phi
+    digest: "sha256:3c168af1dea0a414299c7d9077e100ac763370e5a98b3c53801a958a47f0a5db"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-3c168af1dea0a414299c7d9077e100ac763370e5a98b3c53801a958a47f0a5db"
+    size: "2.3G"
+    acquisition:
+      channel: ollama
+      artifact_provenance: unverified   # 见下方 note
+
+    params_total_b: 3.84
+    params_evidence: "llama-bench 报 3.84 B；官方模型卡称 3.8B dense decoder-only Transformer"
+    params_evidence_url: "https://huggingface.co/microsoft/Phi-4-mini-instruct"
+    params_evidence_date: "2026-09-08"
+    gate1_params_le_5b: PASS
+
+    gate2_llamacpp: PASS
+    gate2_runtime_scope: rt-2026-09-08
+    gate2_tested_artifact_sha: "3c168af1dea0a414299c7d9077e100ac763370e5a98b3c53801a958a47f0a5db"
+    gate2_tested_date: "2026-09-08"
+    gate2_bench:
+      pp512_tps: 107.47
+      pp1024_tps: 98.15
+      pp1200_tps: 92.91
+      tg32_tps: 49.65
+
+    license_claim:
+      text: "MIT"
+      source_url: "https://huggingface.co/microsoft/Phi-4-mini-instruct/blob/main/LICENSE"
+      checked_date: "2026-09-08"
+      secondary_evidence: "本机 ollama show 的 License 段显示 Microsoft / Copyright (c) Microsoft Corporation（输出截断，未含完整 MIT 文本）"
+    gate3_license: TODO              # ⚠️ 正式 GATE-3 未执行
+
+    gate4_multilingual: TODO         # ⚠️ 正式 GATE-4 按实施方案原位置执行
+    language_smoke:
+      protocol: "tie-break smoke，不是正式 GATE-4"
+      criterion: "实质性回答是否使用提问所用的语言（非事实正确性）"
+      same_language_output: "5/5"
+      tested_date: "2026-09-08"
+      note: |
+        官方模型卡声明语言 23 种，含 zh，【不含 tl、不含 hi】。
+        本轮 5/5 是本项目当前 artifact + protocol 下的实测行为，
+        【不得改写为"官方支持 tl / hi"】，也不代表答案正确率 ——
+        输出内容为流利的错误信息（hi 那条讲耆那教圣日，tl 那条讲菲律宾海军军官轮换）。
+        该批输出已留档，作为 A 臂幻觉的多语种样本：
+        experiments/gate2_raw/_language_smoke.log
+
+    thinking:
+      project_setting_required: false     # 项目约束 THINKING_ENABLED = False
+      think_true: "UNSUPPORTED (HTTP 400: model does not support thinking)"
+      think_false: "PASS，thinking 字段不存在"
+      tested_date: "2026-09-08"
+      note: |
+        当前 artifact 不支持独立 thinking 模式，因此不存在该模式被误开启、
+        或其独立 thinking channel 泄露的风险，与 THINKING_ENABLED=False 同向。
+        ⚠️ 本结论【不等于】普通 response 不会产生 reasoning-style prose ——
+        同批 qwen3:4b 实验已表明二者是两件事（think=False 后 thinking 字段消失，
+        但 response 仍产出英文 reasoning-style prose）。
+      behavioral_evidence: |
+        语言 smoke 的 5 条输出均直奔答案、无推理前缀（n=5）。
+        比结构论证弱，但是实测。结构与行为两者同向，均不构成保证。
+
+    selection_note: |
+      M2 主模型选定于 2026-09-08。三条互相独立的理由：
+        1. 上下文预算：与另一 GREEN 候选 qwen3:4b 相比 prefill 更快，
+           TTFT=10s 下可用预算明显更宽（具体值由 S4a.9 实测，不在此冻结）
+        2. MIT license claim（官方 LICENSE + 本机 artifact 二次证据）
+        3. 无独立 thinking 模式，降低该模式被误开启 / channel 泄露的风险
+      辅助证据（不单独承重）：语言 smoke 5/5。
+      ⚠️ 这不是"最快的赢"：llama3.2:3b 更快且语言同为 5/5，
+      但其 license_claim 为 Llama Community（AMBER），GATE-3 未过即不进 tie-break。
+      门在前，性能在后。
+      ⚠️ 这不是 M3 的模型冠军。M3 会重新打开基座家族选择。
+
+  # ============================================================================
+  # 其余候选（GATE-1 / GATE-2 已实测）
+  # ============================================================================
+  - tag: qwen3:4b
+    role: candidate
+    availability: available
+    family_key: qwen
+    digest: "sha256:3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f"
+    size: "2.3G"
+    acquisition: {channel: ollama, artifact_provenance: unverified}
+
+    params_total_b: 4.02
+    params_evidence: "llama-bench 报 4.02 B"
+    params_evidence_date: "2026-09-08"
+    gate1_params_le_5b: PASS
+
+    gate2_llamacpp: PASS
+    gate2_runtime_scope: rt-2026-09-08
+    gate2_tested_artifact_sha: "3e4cb14174460404e7a233e531675303b2fbf7749c02f91864fe311ab6344e4f"
+    gate2_tested_date: "2026-09-08"
+    gate2_bench: {pp512_tps: 87.95, pp1024_tps: 78.81, pp1200_tps: 75.40, tg32_tps: 44.58}
+
+    license_claim:
+      text: "Apache License 2.0"
+      evidence: "本机 ollama show 的 License 段（输出截断）"
+      checked_date: "2026-09-08"
+    gate3_license: TODO
+
+    gate4_multilingual: TODO
+    language_smoke:
+      protocol: "tie-break smoke，不是正式 GATE-4"
+      status: NOT_CLEAN
+      same_language_output: "1/5（不作为干净的多语种能力测量引用）"
+      tested_date: "2026-09-08"
+      note: |
+        混杂已检验并大部分排除：think 开关确认生效
+        （think=True 时 API 返回独立 thinking 字段，think=False 时字段消失）；
+        400-token 对照下 hi 那条在所观察部分仍未出现同语言实质回答。
+        但原 protocol 仅 120 output token，且未在全部五条上复跑，
+        故不作为干净的多语种能力测量。
+        think=False 后普通 response 仍产出英文 reasoning-style prose ——
+        这说明「独立 thinking channel」与「response 中的推理式文本」是两件事。
+
+  - tag: llama3.2:3b
+    role: candidate
+    availability: available
+    family_key: llama
+    digest: "sha256:dde5aa3fc5ffc17176b5e8bdc82f587b24b2678c6c66101bf7da77af9f7ccdff"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-dde5aa3fc5ffc17176b5e8bdc82f587b24b2678c6c66101bf7da77af9f7ccdff"
+    size: "1.9G"
+    acquisition: {channel: ollama, artifact_provenance: unverified}
+
+    params_total_b: 3.21
+    params_evidence: "llama-bench 报 3.21 B"
+    params_evidence_date: "2026-09-08"
+    gate1_params_le_5b: PASS
+
+    gate2_llamacpp: PASS
+    gate2_runtime_scope: rt-2026-09-08    # cpu_only_verified 的三组对照即在本模型上做
+    gate2_tested_artifact_sha: "dde5aa3fc5ffc17176b5e8bdc82f587b24b2678c6c66101bf7da77af9f7ccdff"
+    gate2_tested_date: "2026-09-08"
+    gate2_bench: {pp512_tps: 117.05, pp1024_tps: 107.17, pp1200_tps: 101.87, tg32_tps: 57.12}
+    gate2_bench_controls:
+      device_none: {pp512_tps: 116.65, pp1024_tps: 106.87, pp1200_tps: 101.59, tg32_tps: 55.70}
+      ngl99_positive: {pp512_tps: 2554.33, pp1024_tps: 2499.06, pp1200_tps: 2440.03}
+
+    license_claim:
+      text: "LLAMA 3.2 COMMUNITY LICENSE AGREEMENT（Release Date: September 25, 2024）"
+      evidence: "本机 ollama show 的 License 段（输出截断）"
+      checked_date: "2026-09-08"
+    gate3_license: TODO              # 属 AMBER 档，须法务书面确认
+
+    gate4_multilingual: TODO
+    language_smoke:
+      protocol: "tie-break smoke，不是正式 GATE-4"
+      same_language_output: "5/5"
+      tested_date: "2026-09-08"
+
+    notes: |
+      未进入 M2 主模型 tie-break —— license_claim 为 Llama Community（AMBER），
+      GATE-3 未过即不进 tie-break。门在前，性能在后。
+      观察留档：ML01（zh）上它是五个模型里唯一选择拒答而非编造的
+      （"我无法提供有关船长晋升的具体时间要求的信息。"）。
+      与实施方案 §12.3「预期的差异来源」给 llama 写的预测一致
+      （"指令跟随保守 → 预期拒答率偏高"）。预测写在测试之前，结果对上；n=1，不作推广。
+      M0 基线可复现性检查：今日 pp512/pp1024 = 117.05/107.17，
+      M0（2026-08-17）为 117.5/107.4。
+
+  - tag: gemma3:4b
+    role: candidate
+    availability: available
+    family_key: gemma
+    digest: "sha256:aeda25e63ebd698fab8638ffb778e68bed908b960d39d0becc650fa981609d25"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-aeda25e63ebd698fab8638ffb778e68bed908b960d39d0becc650fa981609d25"
+    size: "3.1G"
+    acquisition: {channel: ollama, artifact_provenance: unverified}
+
+    params_total_b: 4.3
+    params_evidence: "ollama show gemma3:4b → parameters 4.3B（architecture gemma3, Q4_K_M, context 131072, embedding 2560）"
+    params_evidence_log: "experiments/gate2_raw/gemma3__gate1_params.log"
+    params_evidence_date: "2026-09-08"
+    gate1_params_le_5b: PASS
+
+    gate2_llamacpp: FAIL
+    gate2_runtime_scope: rt-2026-09-08
+    gate2_tested_artifact_sha: "aeda25e63ebd698fab8638ffb778e68bed908b960d39d0becc650fa981609d25"
+    gate2_tested_date: "2026-09-08"
+    gate2_failure_scope: "当前 Ollama artifact + rt-2026-09-08"
+    gate2_failure_reason: "key not found in model: gemma3.attention.layer_norm_rms_epsilon"
+    gate2_failure_evidence: "GGUF 魔数正常（47475546）；llama-bench exit code 1；完整诊断见 experiments/gate2_raw/gemma3__diagnostic.log"
+    gate2_failure_attribution: |
+      失败表现与 artifact 元数据 / 转换链问题一致，但
+      【当前证据不足以将根因归因到 Ollama 转换环节本身】。
+      能做出该区分的实验见 gate2_secondary_source_retest。
+    gate2_secondary_source_retest: |
+      S4b 用独立来源 GGUF（Google 官方或 ggml-org）复测。
+      该实验区分「artifact provenance 问题」与「runtime/schema 兼容问题」。
+      不阻塞 S4a。
+
+    gate3_license: TODO
+    gate4_multilingual: TODO
+
+    notes: |
+      ⚠️ 不得写"Gemma 3 架构不兼容"—— 见 gate2_failure_attribution。
+      事实：ollama show 显示 Capabilities 含 vision，本 artifact 为多模态打包。
+      ⚠️ 当前【无证据】表明 vision capability 与本次 GATE-2 加载失败有关 ——
+      失败发生在 hyperparameter 加载阶段，且本轮未向 llama-cli 提供任何 mmproj。
+      S4b 复测时优先使用来源与 provenance 可验证的文本生成 GGUF artifact；
+      若所选分发物包含独立 multimodal projector，则本项目不加载 mmproj，
+      理由是实施方案 §18.1 不评估图片能力（范围问题，不是兼容性嫌疑）。
+
+  - tag: qwen3.5:4b
+    role: candidate
+    availability: available
+    family_key: qwen                 # ⚠️ 与 qwen3:4b 同族，统计家族数时只算 1 个
+    digest: "sha256:81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490"
+    size: "3.2G"
+    acquisition: {channel: ollama, artifact_provenance: unverified}
+
+    params_total_b: 4.7
+    params_evidence: "ollama show qwen3.5:4b → parameters 4.7B（GGUF general.parameter_count 为总参数；architecture qwen35, Q4_K_M, context 262144）"
+    params_evidence_date: "2026-09-08"
+    gate1_params_le_5b: PASS
+
+    gate2_llamacpp: FAIL
+    gate2_runtime_scope: rt-2026-09-08
+    gate2_tested_artifact_sha: "81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490"
+    gate2_tested_date: "2026-09-08"
+    gate2_failure_scope: "当前 Ollama artifact + rt-2026-09-08"
+    gate2_failure_reason: "key qwen35.rope.dimension_sections has wrong array length; expected 4, got 3"
+    gate2_failure_evidence: "GGUF 魔数正常（47475546）；完整诊断见 experiments/gate2_raw/qwen3.5__diagnostic.log"
+    gate2_failure_attribution: |
+      失败表现与 artifact 元数据 schema 问题一致，但
+      【当前证据不足以将根因归因到 Ollama 转换环节本身】。
+      同一错误在 ggml 0.20.0（2026-08-17）与 ggml 0.23.0（本轮）两个版本上
+      一字不差复现 —— 跨版本未修复，但结论仍限定于 artifact + runtime。
+    gate2_secondary_source_retest: "S4b 取官方 GGUF 复测；不阻塞 S4a"
+
+    license_claim:
+      text: "Apache License 2.0"
+      evidence: "本机 ollama show 的 License 段（输出截断）"
+      checked_date: "2026-09-08"
+    gate3_license: TODO
+    gate4_multilingual: TODO
+
+    notes: |
+      ⚠️ 不得写"架构不兼容"。
+      GATE-1 已通过（4.7B ≤ 5B），故本次 GATE-2 FAIL 是【正式的候选评估结果】，
+      不是历史遗留的信息性复测 —— 执行手册原本预判"若 >5B 则降级为信息性记录"，
+      该预判被实测推翻。
+      ollama show 另显示 Capabilities 含 vision 与 thinking。
+
+  # ============================================================================
+  # 渠道不可用（⚠️ 这不是任何一道 GATE 的 failure）
+  # ============================================================================
+  - tag: granite4:tiny
+    role: candidate
+    availability: unavailable
+    family_key: granite
+    reason: "ollama pull: model manifest file does not exist"
+    acquisition:
+      ollama: {status: unavailable, evidence: "model manifest file does not exist"}
+      direct_gguf: {status: not_investigated}
+    gate1_params_le_5b: TODO
+    gate2_llamacpp: TODO
+    gate3_license: TODO
+    gate4_multilingual: TODO
+    notes: |
+      ⚠️ Ollama tag 不存在 ≠ 模型不可获得。这是分发渠道问题，不是 GATE failure。
+      S4b 待办：IBM Granite 4.0 的 ≤5B 型号是 Micro / H-Micro（3B dense）；
+      H-Tiny 为 7B 总参数、H-Small 为 32B，两者按 GATE-1 应判 FAIL。
+      即 granite4:tiny 这个 tag 指向的很可能本就不是合格候选。
+
+  - tag: smollm3
+    role: candidate
+    availability: unavailable
+    family_key: smollm
+    reason: "ollama pull: model manifest file does not exist"
+    acquisition:
+      ollama: {status: unavailable, evidence: "model manifest file does not exist"}
+      direct_gguf: {status: not_investigated}
+    gate1_params_le_5b: TODO
+    gate2_llamacpp: TODO
+    gate3_license: TODO
+    gate4_multilingual: TODO
+    notes: |
+      ⚠️ Ollama tag 不存在 ≠ 模型不可获得。这是分发渠道问题，不是 GATE failure。
+      S4b 待办：调查 direct GGUF 路径。
+
+  # ============================================================================
+  # 非候选资产
+  # ============================================================================
+  - tag: qwen3:32b
+    role: teacher
+    availability: available
+    digest: "sha256:3291abe70f16ee9682de7bfae08db5373ea9d6497e614aaad63340ad421d6312"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-3291abe70f16ee9682de7bfae08db5373ea9d6497e614aaad63340ad421d6312"
+    size: "19G"
+    gate1_params_le_5b: "N/A（teacher 不上船，不受 5B 约束）"
+    gate2_llamacpp: "N/A（teacher 不上船，不用 llama.cpp 运行时）"
+    gate_t1_output_use_license: TODO   # ⚠️ 硬门：该许可是否限制用其输出训练/改进其他模型
+    gate_t2_local_feasibility: PASS
+    gate_t2_evidence: "M0（2026-08-17）实测 26.09 tok/s；blob 19G，96GB 内存充裕"
+    gate_t2_scope_note: |
+      ⚠️ 该 PASS 的依据来自 M0，当时【未记录完整 runtime scope】——
+      按本项目现行的 GATE 作用域纪律（见 runtime_scopes），
+      这样的 PASS 形式上不成立。
+      待办：S11（合成数据生成）之前用 rt-* 记录重测，补 runtime / date / artifact digest。
+      不阻塞 S4a 关闭。
+    license_claim:
+      text: "Apache License 2.0"
+      evidence: "待补官方来源"
+      checked_date: null
+    notes: |
+      M2 首轮的单 teacher。
+      ⚠️ teacher 不上船，但【它的产出会上船】：teacher → 合成训练数据 → LoRA adapter → 上船。
+      许可按"产出是否上船"传递，不按"自身是否部署"。故设 GATE-T1（输出用途许可）。
+      "N/A" 是一个已做出的判断，不是"还没查"；留空才是后者。
+
+  - tag: bge-m3:latest
+    role: embedder
+    availability: available
+    digest: "sha256:daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c"
+    size: "1.1G"
+    dim: 1024                         # 影响索引包体积与岸船一致性校验（IndexManifest）
+    gate_e1_runtime: TODO             # 船端能否算查询向量。Ollama 可用 ≠ 船端可用
+    gate_e2_license: TODO
+    gate_e3_multilingual: TODO        # ⚠️ 硬门，不是烟雾测试
+    gate_e3_evidence: null            # 填 M1c 里多语种题的检索 Recall
+    notes: |
+      ⚠️ embedder 的多语种是【承重的】，不是加分项。
+      embedder 不懂印地语 → ML03 在检索阶段就死了 → B/D 臂拿什么模型生成都无所谓。
+      判据不是"能否产出该语言"，而是"该语言的查询能否召回正确的英文 chunk" ——
+      语料是英文、查询是 zh/tl/hi，这是跨语言检索，比同语言检索难。
+
+  - tag: qwen2.5:14b
+    role: other
+    availability: available
+    digest: "sha256:2049f5674b1e92b4464e5729975c9689fcfbf0b0e4443ccf10b5339f370f9a54"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-2049f5674b1e92b4464e5729975c9689fcfbf0b0e4443ccf10b5339f370f9a54"
+    size: "8.4G"
+    note: "本机已装资产；总参数超出 ≤5B 约束，不是船端候选。"
+
+  - tag: deepseek-r1:32b
+    role: other
+    availability: available
+    digest: "sha256:6150cb382311b69f09cc0f9a1b69fc029cbd742b66bb8ec531aa5ecf5c613e93"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-6150cb382311b69f09cc0f9a1b69fc029cbd742b66bb8ec531aa5ecf5c613e93"
+    size: "18G"
+    note: "本机已装资产；总参数超出 ≤5B 约束，不是船端候选。"
+
+  - tag: llama3:latest
+    role: other
+    availability: available
+    digest: "sha256:6a0746a1ec1aef3e7ec53868f220ff6e389f6f8ef87a01d77c96807de94ca2aa"
+    local_blob: "/Users/developer/.ollama/models/blobs/sha256-6a0746a1ec1aef3e7ec53868f220ff6e389f6f8ef87a01d77c96807de94ca2aa"
+    size: "4.3G"
+    note: "本机预装模型；当前不在 S4 候选集中。"
