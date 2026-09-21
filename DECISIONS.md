@@ -732,4 +732,1021 @@
 - 待办：S5 后对真实 chunk 与真实 rendered context 执行 9c-final，再执行 9d；
   在此之前不修改预算相关 contracts 常量，不宣布 S4a.9 CLOSED。
 
-  
+  ## 2026-09-17 · S4a.9 最终预算诊断：真实 chunk 暴露 chars/token 尾部风险
+
+### [L2] S4a.9c-final：真实语料上的 token estimator 不能只用总体中位数验收
+
+- owner_experiment: S4a.9c-final / S4a.9d
+
+- 冻结输入：
+  - corpus = `corpus/chunks.jsonl`
+  - chunk count = 3383
+  - corpus sha256 =
+    `8c6bee0aa952b387e20a2de76253d4384ffe859a8050e6fe8fee9166c956aeaa`
+  - model = `phi4-mini:latest`
+  - `MAX_PROMPT_TOKENS X = 950`
+  - `PROMPT_OVERHEAD_RESERVE_TOKENS O = 206`
+  - `CONTEXT_PACK_MARGIN m = 0.86`
+  - provisional `CONTEXT_PACK_BUDGET_TOKENS B = 639`
+  - `CHARS_PER_TOKEN_EST = 4`
+  - `CITATION_HEADER_EST_TOKENS = 14`
+  - `TOP_K_CONTEXT = 5`
+
+- 事实：
+  - 3379 个模拟窗口中，有 70 个在 `D=0` 时满足
+    `O + actual_context > 950`。
+  - 70 个窗口中 51 个至少包含一个当时已定义的异常标签。
+  - 剩余 19 个窗口为 `none_observed`。
+  - 排除异常标签 chunk 的诊断性 counterfactual 后，
+    仍有 `19 / 3218 = 0.59%` 的窗口超预算。
+  - `none_observed` chunk 的 chars/token：
+    min / p5 / p50 / mean / p95 / max =
+    `2.331 / 3.787 / 5.134 / 5.602 / 9.047 / 24.600`。
+  - `none_observed` rendered actual / est_prompt_tokens：
+    p50 = `0.7770`，p95 = `1.0327`，max = `1.6640`。
+  - 有 102 个 `none_observed` chunk 的
+    `actual_rendered / estimate > 1.15`。
+  - 真实相邻 rendered chunk 的 separator 增量实测 max = `1 token`。
+
+- 推论：
+  - `CHARS_PER_TOKEN_EST=4` 对总体中位 chunk 是保守估计，
+    但总体保守不能推出尾部安全。
+  - prompt-budget correctness 不能只由总体 chars/token 中位数、
+    p95 或单一 ±15% 假设证明。
+  - “总体平均高估”与“局部尾部低估导致 prompt overflow”
+    可以同时成立。
+
+- **决策：S4a.9 的安全判断必须以真实 rendered context 的 tokenization
+  为依据；不能再用总体 chars/token 中位数替代尾部安全性。**
+
+- **决策：本轮不得因为观察到 overflow 就事后修改
+  `CHARS_PER_TOKEN_EST`、margin、MAX_PROMPT_TOKENS 或 packing 规则。**
+  先做 failure decomposition。
+
+- 待办：
+  - 对 19 个 `none_observed` 窗口逐窗口 deep dive。
+  - 单独检验 actual-token-aware prefix packing。
+  - framing boundary `D` 保持显式未知，除非能从版本控制证据重建。
+
+
+### [L3] S4a.9c 方法论更正：tokenization 不可加性不得被“估算误差归零”掩盖
+
+- 事实：
+  - rendered chunk 的 token 数预计算后，
+    chunk 内部 estimator 误差可以消除。
+  - 但 tokenizer 在字符串边界上并不一般满足严格可加。
+  - 已实测真实相邻 rendered chunk separator 增量 max = 1 token。
+  - 当时 9a-bis 的完整 framing template 是通过 stdin/heredoc 临时运行，
+    未进入版本控制，因此 framing 与首/末 chunk 的 boundary delta `D`
+    无法从已版本控制证据精确补算。
+
+- **更正：此前“预计算 token 后估算误差直接归零”的表述过强。**
+  能消除的是逐 chunk 的 chars/token proxy 误差；
+  完整 prompt 是否安全仍取决于实际拼接 tokenization。
+
+- **决策：未知的 `D` 不猜上界，不伪装成已关闭变量。**
+  结论必须写成条件式。
+
+- **决策：任何测量若其输出将进入契约常量或承重派生量，
+  测量脚本与输入模板必须进入版本控制。**
+  只保存输出数字或脚本 sha256 不足以支持未来补算派生量。
+
+- 待办：
+  - 后续完整 prompt admission control 应直接 tokenize 完整 prompt，
+    而不是继续维护 `O + chunk + SEP + D` 的误差项链。
+
+
+## 2026-09-17 · S4a.9c none_observed deep dive 完成
+
+### [L2] 19 个 clean-labeled overflow 的主因是正文 token estimator 尾部，不是 citation header
+
+- owner_experiment: S4a.9c deep dive
+
+- 事实：19 个 `none_observed` 超预算窗口的 failure shape：
+  - `A_single_chunk_tail = 16 / 19`
+  - `B_multi_chunk_accumulation = 3 / 19`
+  - `C_header_boundary = 0 / 19`
+  - `D_mixed = 0 / 19`
+
+- 事实：
+  - 这些窗口的真实 citation header increment 恒为 11 token。
+  - 当前 `CITATION_HEADER_EST_TOKENS = 14`。
+  - 因而 header 在这些窗口中是高估而非低估；
+    越界来自正文侧的 token estimator tail。
+  - 这些 chunk 的 `actual_text / est_tokens = 1.01–1.58`，
+    对应 chars/token `2.33–3.94`。
+
+- **决策：不得把这 19 个 overflow 归因于 citation header。**
+  当前证据指向正文 chars/token 尾部。
+
+- **决策：`CITATION_HEADER_EST_TOKENS=14` 的局部高估也不得反过来
+  被解释为“因此应该调低 header 常量”。**
+  本轮是诊断，不是调参。
+
+
+### [L2] actual-token-aware prefix packing 在当前 clean-window 样本上消除了已观察 overflow
+
+- 事实：保持 relevance/order、prefix semantics、`TOP_K_CONTEXT=5`
+  与 X/O 不变，仅使用实测 rendered token count 与实测 separator：
+
+  对原 19 个窗口：
+  - cap = 744 (`X-O`)：
+    19/19 在加入导致越界的 chunk 之前被挡住；
+    0/19 最终实际越界。
+  - cap = 639：
+    19/19 被提前挡住；
+    0/19 最终实际越界。
+
+- 对全部 3218 个 `none_observed` 窗口、cap=744：
+  - overbudget = `0 / 3218`
+  - actual context p50 / p95 / max =
+    `635 / 734 / 744`
+  - realized k：
+    - k=1: 0.78%
+    - k=2: 13.67%
+    - k=3: 43.66%
+    - k=4: 29.18%
+    - k=5: 12.71%
+
+- 事实：对这 3218 个实际 pack，
+  `Σ(rendered chunk) + Σ(separator increment)` 与完整 context 串实测 token 数的残差：
+  min / p50 / max = `0 / 0 / 0`。
+
+- **决策：上述“残差为 0”只是在当前 3218 个 pack 上的实测事实，
+  不是 tokenizer 可加性的一般性证明。**
+
+- **决策：actual-token-aware packing 是后续设计候选，
+  但本轮不据此修改 contracts 或 packing。**
+
+- 事实：在 actual-token-aware cap=744 下，
+  `TOP_K_CONTEXT=5` 有 12.71% 窗口真正触顶；
+  因而“TOP_K=5 几乎不会触及”的旧解释不再成立于该 counterfactual。
+
+- 待办：
+  - production 预算设计时重新定义 TOP_K 的语义；
+  - 优先考虑 full-prompt token admission，而不是继续叠加 estimator 修补项。
+
+
+### [L3] FMM estimator-tail enrichment 存在，但与 +66 chunks 是否同源仍 unresolved
+
+- 事实：
+  - FMM 当前 `878 / 3383 = 25.95%` chunks。
+  - FMM 占 19 个 `none_observed` overbudget windows：
+    `10 / 19 = 52.6%`。
+  - FMM 占这些窗口涉及的 37 个去重 packed chunks：
+    `22 / 37 = 59.5%`。
+  - descriptive window enrichment =
+    `(10/19) / (878/3383) = 2.03`。
+  - descriptive chunk enrichment =
+    `(22/37) / (878/3383) = 2.29`。
+  - 版本控制中的旧基线记录 FMM = 812 chunks，
+    当前为 878，即 `+66 / +8.1%`。
+
+- 事实：这些 FMM tail chunk 共同形态主要是维护编码/编号密集，
+  不是 table-layout dense。
+
+- 限制：旧版本只保存了 per-document chunk count，
+  没有旧的 per-chunk corpus，因此无法识别“新增的 66 个 chunk”
+  并与 estimator tail 做重合分析。
+
+- **决策：“FMM +66 chunk 与 estimator tail 同源”状态 = `unresolved`。**
+  enrichment 是 observation，不是同源性证据。
+
+- **决策：不得由 enrichment 推导 parser 修改。**
+
+
+## 2026-09-17 · TACM native extraction failure 边界确认
+
+### [L3] TACM PDF p.38–103 可作为已实测 native-text failure 区间
+
+- 事实：
+  - PDF p.93：Type 3 / Custom / `uni=no`；`pdftotext -layout` 乱码。
+  - p.94：Type 3 / Custom / `uni=no`；乱码。
+  - p.103：Type 3 / Custom / `uni=no`；乱码。
+  - p.104：Calibri/Verdana TrueType / WinAnsi / `uni=yes`；
+    `pdftotext -layout` 恢复正常，PCL E-Learning Matrix 可读。
+  - 起始侧 p.38 的坏页证据此前已取得。
+
+- **决策：TACM PDF p.38–103 可写为“已验证 native text extraction
+  不可用区间”。**
+
+- **边界：不得把“Type 3 / Custom / uni=no”直接升级为因果根因。**
+  它是与 failure 同时出现的结构证据。
+
+- **更正：此前“任何 parser 改动都救不了它”的说法过强。**
+  当前证据只证明基于现有 PDF text layer / `pdftotext` 的路径无法恢复；
+  OCR / visual extraction 未被排除。
+
+- 观察：截图显示该区间至少部分页面为 Microsoft Forms 风格的 competency
+  assessment 页面；这解释了可能的生成机制，但不是已证明根因。
+
+- 待办：OCR 是否值得用于该区间，必须与“是否建立通用 OCR fallback”
+  分开决策。
+
+
+### [L2] 更正：2026-08-31「全部有文本层，无需 OCR」的结论不成立
+
+- 事实：2026-08-31 勘察记录「发现 1 ✅ 全部有文本层，无需 OCR」，
+  依据为 `pdffonts` 显示 9 份 PDF 的字体表均非空。
+
+- 事实：TACM PDF p.38–103 的字体表非空，但相关字体为
+  Type 3 / Custom encoding，`pdffonts` 的 `uni` 列为 `no`；
+  `pdftotext -layout` 输出不可用。
+
+- **更正：该结论对 TACM p.38–103 不成立。**
+  「字体表非空」与「字形可映射到 Unicode / native extraction 可用」
+  不是同一个量。
+
+- 依据（为何当时看起来成立）：
+  `uni` 列当时已经存在于 `pdffonts` 输出中，
+  不是数据缺失，而是判断时使用了错误的观测量：
+  字体表非空 → 推断存在可用文本层 → 推断无需 OCR。
+
+- 推论：该错误属于 §6.2 第 14 类错误的早期实例：
+  观察到的量与最终填写的判断不是同一个被测量对象。
+
+- **决策：按只追加原则不回改 2026-08-31 的历史记录，
+  以本条作为明确更正。**
+
+- **决策：今后任何“native 文本层可用性”判断必须直接引用
+  Unicode mapping / extraction output usability 或等价证据，
+  不得以字体表是否非空作为充分依据。**
+
+- 边界：本条只推翻“全部有文本层，因此无需 OCR”这一结论，
+  不改变 2026-08-31 其余独立勘察发现。
+
+
+## 2026-09-17 · S5 parser / corpus baseline 建成，但验收仍有开放 failure surfaces
+
+### [L3] S5 corpus baseline 的可再生结果
+
+- 事实：
+  - 9/9 PDF 解析成功。
+  - 总页数 = 1335。
+  - chunk count = 3383。
+  - `corpus/chunks.jsonl` sha256 =
+    `8c6bee0aa952b387e20a2de76253d4384ffe859a8050e6fe8fee9166c956aeaa`。
+  - 每手册 chunk：
+    - CRM 240
+    - CMM 363
+    - EMM 344
+    - ERM 364
+    - FMM 878
+    - NPM 286
+    - QMM 416
+    - SMM 300
+    - TACM 192
+  - build time ≈ 2.7–2.8 s。
+  - 同一输入连续 build 的 `chunks.jsonl` sha256 完全一致。
+
+- **决策：该 3383-chunk corpus 作为当前 S5 baseline 与后续诊断的冻结输入。**
+
+- **边界：baseline 可再生 ≠ S5 已完全验收。**
+  TACM 乱码、视觉内容丢失、section metadata fallback 等 failure surface 仍开放。
+
+- **决策：不得因为数量、长度、确定性等 shape checks 通过，
+  就把 S5 解释为内容正确性 PASS。**
+  TACM 乱码 chunk 已证明“形状正常”可以与“内容不可用”同时成立。
+
+
+### [L1] Parser 与 corpus builder 必须进入版本控制，corpus sha 才有可追溯生成链
+
+- falsified_if: 无；这是 provenance / reproducibility 纪律。
+
+- 事实：在 2026-09-17 之前，
+  `components/parsers/kaiva_pdf.py` 与 `ingest/build_corpus.py`
+  仍是 untracked，但 corpus sha 已被 S4a.9c 等测量引用。
+
+- 推论：一个 corpus digest 若由未版本控制的生成代码产生，
+  digest 只能标识结果，不能复现生成过程。
+
+- **决策：parser 与 corpus builder 必须进入 Git。**
+
+- 实施：
+  - commit `545947a`
+    `feat: add KAIVA PDF parser and corpus builder S5 baseline`
+  - 随后从该 commit 的代码重建 corpus：
+    `3383 chunks`
+    sha256 仍为
+    `8c6bee0aa952b387e20a2de76253d4384ffe859a8050e6fe8fee9166c956aeaa`
+
+- **决策：自此可把 `545947a → 8c6bee0a…` 作为 S5 baseline 的
+  provenance 链。**
+
+- **边界：commit message 中的 S5 baseline 不等于宣布 S5 PASS。**
+
+
+## 2026-09-17 · Citation section metadata 独立审计
+
+### [L3] 38 条人工 citation 的 3 个 exact mismatch 是 representation difference，不是已证 parser bug
+
+- 事实：38 条人工 citation 与 corpus page-level section 对比：
+  - exact match = 35
+  - exact mismatch = 3
+  - citation page missing chunk = 0
+
+- mismatch：
+  - FL13 EMM p.131：gold `Chapter 15` vs parser `15`
+  - PR05 EMM p.131：gold `Chapter 15` vs parser `15`
+  - CD02 EMM p.96：gold `Chapter 10` vs parser `10`
+
+- 后续 PDF / parser 审计：
+  - EMM 页眉并无独立 SECTION 字段；
+    页面使用 `Chapter 15 – ...` / `Chapter 10 – ...` 标题。
+  - parser 对 EMM chapter title 有意规范为裸章节号。
+  - EMM 157 个 chapter pages 的 section 均使用裸数字，无混杂表示。
+  - 38/38 citation 的 semantic location 均一致。
+
+- **决策：这 3 条 mismatch 不作为 parser bug，也不修改 v5.3 testset。**
+  当前证据支持“representation-only mismatch”。
+
+- **决策：exact string equality 与 semantic location identity 必须分开。**
+  后续 scorer 是否 canonicalize section 属于独立设计问题，
+  本轮不提前决定。
+
+- 边界：38 条 gold 的一致性只覆盖这些 citation 页，
+  不证明全 corpus section metadata 正确。
+
+
+### [L2] `title_line_fallback` 是独立于 OCR 的 citation metadata failure surface
+
+- owner_experiment: parser metadata audit / Phase B metadata gate
+
+- 事实：
+  - corpus page-level section source：
+    - `explicit_header_label`: 993 页 / 2789 chunks
+    - `title_line_fallback`: 254 页 / 594 chunks
+    - inherited / unresolved：当前有 chunk 页中 0
+  - 96 页 / 278 chunks 被描述性规则标为 section anomaly candidate，
+    横跨 6 份手册：
+    TACM 66、EMM 13、CMM 7、ERM 5、CRM 4、SMM 1。
+  - 已确认异常集中于 `title_line_fallback`。
+  - fallback 的核心行为允许页眉扫描窗口中第一条非 doc_id 文本
+    被直接作为 section。
+  - TACM p.38–103 的 50 个乱码 chunks：
+    50/50 section 来自 current-page extraction，
+    0 inheritance，0 unresolved。
+  - 其中 37 个 section 有明显乱码证据；
+    另有 13 个值形似合法字符串，例如 p.100 的 `"9"`，
+    恰好可与真实章节号碰撞。
+  - TACM p.104–115 出现 `section = "PCL E"`。
+  - TACM p.116–120 出现完整问句被当作 section。
+
+- **更正：此前“乱码页会静默继承 p.37 section”的机制猜测被实测证伪。**
+  实际上 permissive fallback 在本页取得了错误字符串，因此 inheritance 没发生。
+
+- **决策：body text usability 与 citation metadata correctness 是两个独立质量轴。**
+  `body usable` 不推出 `citation metadata valid`。
+
+- **决策：未来 OCR quality gate 必须有独立 citation-metadata gate。**
+  OCR 正文成功不得自动让 citation metadata 通过。
+
+- **边界：本轮不据此删除 fallback、不修改 parser。**
+
+
+### [L3] section 取值行与正文剥离语义存在独立风险
+
+- 事实：section 来源行在部分 fallback 路径中没有从正文剥除：
+  - numbered_regex：12 页
+  - raw_line：78 页
+  - 合计 90 页
+
+- 推论：
+  - 若未来检索/BM25 与 renderer 按现有规划实现，
+    同一字符串可能同时出现在正文与 citation header。
+  - 这可能抬高 BM25 词频并重复占用 prompt token。
+
+- **决策：该问题独立记录，不与 OCR detector 合并。**
+
+- 边界：当时 retriever / renderer / scorer 尚未实现，
+  因此这是 future risk，不得写成“当前 M2 已被扣分”。
+
+
+## 2026-09-17 · OCR Phase A：native extraction usability 全语料调查
+
+### [L2] `uni=no` 不是 production OCR trigger；结构信号与文本可用性不是同一个量
+
+- owner_experiment: OCR Phase A
+
+- 事实：
+  - 扫描 9 PDF / 1335 页，采集失败 0。
+  - 全量逐页采集 structural + native extraction signals。
+  - 1198 个 unreviewed 页面含至少一个 `uni=no` 字体，
+    占 unreviewed 约 94.4%。
+  - mixed `uni=yes + uni=no` 页面 = 941。
+  - 人工抽样 mixed / all-uni-no 页面正文均可读。
+  - TACM confirmed_bad 区间的 Type3 / Custom signal 有区分度，
+    但不能由此证明 Type3 是乱码的因果根因。
+
+- **决策：`uni=no → OCR required` 禁止作为 production rule。**
+  structural signal 适合作为诊断证据，不等于 page usability。
+
+- **决策：production detector 的被测量对象是“该页 native extraction
+  是否支持本项目的 retrieval/citation”，不是字体属性本身。**
+
+- 运行成本：
+  - 逐页 `pdffonts` ≈ 55.8 s
+  - 整份 `pdftotext` 后计算 output signals ≈ +0.9 s
+  - 当前 build corpus ≈ 2.8 s
+
+- **决策：是否把 structural channel 放进 hot path 必须有增量收益证据，
+  不能因为它诊断价值高就自动进入 production ingest。**
+
+
+### [L2] 当前 parser 存在“图像业务内容被静默丢页”的第二类正文 failure surface
+
+- 事实：
+  - `extracted_chars == 0`: 13 页
+  - `0 < extracted_chars < 120`: 17 页
+  - `extracted_chars < 120`: 30 页
+  - parser 在 strip 后因 body `< CHUNK_MIN_CHARS=120`
+    实际丢弃 88 页。
+  - Phase A 抽样的 8/8 丢弃页均发现页面视觉层存在业务内容，
+    包括流程图、扫描政策页、图片化表格等。
+  - 示例：
+    - QMM p.139 / p.148：整页扫描政策文字
+    - CRM p.31：BCDR 流程图
+    - ERM p.17：应急报告流程图
+    - TACM p.12：能力评估流程图
+    - EMM p.103：Open Reporting policy poster
+    - SMM p.71：Hot Work schematic
+    - CMM p.113：绩效评估表
+
+- **决策：native text garbling 与“视觉内容存在但 native body 不足”
+  是两个正交 failure surface。**
+
+- **决策：`body_chars < 120` 不能直接等价为 `OCR required`。**
+  同一观察也可由封面、空白页、分隔页产生。
+
+- **决策：当前 parser 对这些丢页缺少逐页 audit record，
+  属于显式 failure-surface 欠账。**
+  本轮只记录，不修改实现。
+
+
+### [L3] OCR 审计信息优先留在 page-level audit，不自动升级 Chunk contract
+
+- 事实：OCR provenance、detector signals、tool version、
+  artifact hash 等主要服务 ingest/debug。
+  检索与生成并不天然需要全部字段。
+
+- **决策：不要因为 ingest 层需要审计信息，
+  就自动把 extraction metadata 提升成全链路 Chunk contract。**
+
+- 设计候选：
+  `page_quality` 类 artifact 以
+  `(doc_id, source_filename, source_hash, pdf_page)` 定位，
+  记录 native/OCR/citation quality。
+
+- **边界：是否最终需要把 extraction_method /
+  citation_metadata_status 提升进 Chunk，
+  留到 Phase B Design Freeze 决定。**
+
+
+### [L1] OCR fallback 不得硬编码 TACM 或页码
+
+- falsified_if: 无；这是系统泛化边界。
+
+- 事实：未来文档集可能完全不同。
+  TACM p.38–103 只是 confirmed_bad calibration sample。
+
+- **决策：production OCR fallback 禁止出现任何
+  `doc_id == TACM` / `38 <= page <= 103` 或语义等价逻辑。**
+
+- **决策：机制必须是
+  `native extraction → page quality decision → fallback / explicit state`，
+  由可用性证据触发，而不是由已知文档身份触发。**
+
+
+## 2026-09-17 · OCR Phase A.1：视觉通道调查
+
+### [L2] 视觉通道证明第二类 failure 无法由 V1 文本 detector 覆盖
+
+- owner_experiment: OCR Phase A.1
+
+- 事实：
+  - 全 1335 页以 40 / 100 dpi 采集视觉信号，失败 0。
+  - 使用 PGM + numpy；Pillow 未安装且未新增依赖。
+  - 40 dpi 全量约 14.7 s；
+    100 dpi 全量约 25.8 s；
+    pdfimages ≈ 3.1 s。
+  - A.1 已复核的 29 张 image-based business-content dropped pages：
+    V1 命中 `0 / 29`。
+  - 页面中部 rendered ink signal 可命中 `29 / 29`。
+  - `pdfimages` object presence 区分度低：
+    1197 个正常有 chunk 页中 1176 页本来就有 image object，
+    主要受页眉 logo 等影响。
+
+- **决策：只建立“乱码 detector”不足以覆盖当前 corpus 的 native extraction failures。**
+  第二类 failure 需要视觉证据或等价机制。
+
+- **决策：image-object existence 不作为当前 production detector 的充分依据。**
+
+- **决策：visual detector 只判断“页面是否存在 native extraction 未覆盖的视觉内容迹象”，
+  不承担“这些内容是否值得索引”的业务价值判断。**
+
+
+### [L3] TACM p.55 的历史 confirmed_bad 标签需要语义复核
+
+- 事实：
+  - TACM p.55 在 40 / 100 / 150 dpi 下所有像素均为 255；
+    nonwhite absolute count = 0。
+  - 人工视觉观察为空白页。
+  - V1 不触发该页。
+
+- **决策：保留历史标签不回改，但记录
+  `current_content_observation = blank_or_separator`。**
+
+- **决策：不得为了把 detector recall 从 65/66 改成 65/65
+  而事后修改 benchmark denominator。**
+  是否重定义 confirmed_bad 属于标签语义决定。
+
+
+### [L3] TACM p.38–103 的内容价值与 OCR 机制是两个独立问题
+
+- 事实：15 页视觉抽样：
+  - business_knowledge_present = 1
+  - repeated_form_scaffolding = 6
+  - mixed = 7
+  - blank = 1
+  - uncertain = 0
+
+- **决策：建立通用 OCR fallback ≠ 决定 TACM p.38–103 全部值得 OCR。**
+
+- **决策：detector 负责 extraction failure；
+  content policy 负责 OCR 后内容是否值得进入 RAG。
+  两者不得合并成一个阈值。**
+
+
+## 2026-09-21 · OCR Phase A.2：88 个 parser-dropped 页全量复核
+
+### [L2] 88 个 dropped pages 的内容分布被完整复核
+
+- owner_experiment: OCR Phase A.2
+
+- 事实：88/88 完成 100 dpi visual review：
+  - `visual_business_content = 66`
+  - `form_or_template = 15`
+  - `mostly_header_footer = 4`
+  - `cover_or_frontmatter = 2`
+  - `blank_or_separator = 1`
+  - `uncertain = 0`
+
+- 事实：NEGATIVE 仅 7 页，因此预注册规则选择 leave-one-out，
+  而不是 2/3–1/3 holdout。
+
+- **决策：不得把这 88 页笼统称为“短页噪声”。**
+  其中绝大多数含视觉业务内容或表单内容。
+
+- reviewer limitation：
+  全部标签来自 `claude_visual_review`，
+  不是 independent human ground truth。
+
+- **决策：后续引用这些结果时必须写
+  “validated against Claude visual-review labels on current 9-PDF corpus”，
+  不得写 human-validated / ground-truth-validated / production-proven。**
+
+
+### [L2] 中部墨迹量 F1/F2 无法稳定区分封面与业务视觉页；V2 保持 underdetermined
+
+- 事实：
+  - EMM p.1（cover / NEGATIVE）middle ink ≈ 0.048。
+  - CRM p.77（VBC / POSITIVE）≈ 0.046。
+  - CRM p.74（VBC / POSITIVE）≈ 0.037。
+  - 即封面的 ink 高于两个真实业务视觉页。
+  - bbox-density F2 同样不能拉开：
+    CRM p.74 相对 max-negative 的余量仍 `< 1`。
+
+- LOO：
+  - C1 F1@40/245：POS 66/66，NEG trigger 1/7（EMM p.1）
+  - C2 F1@100/245：66/66，1/7
+  - C3 F2@40/245：65/66，2/7
+
+- LODO：
+  - C1 CRM fold 漏 p.74 / p.77
+  - C2 EMM fold 触发 p.1
+  - C3 多折失败
+
+- **决策：V2 threshold status = `still_underdetermined`。**
+  不通过继续降低 ink threshold 来掩盖 feature overlap。
+
+- **决策：这里的问题是 feature discrimination，
+  不是简单“negative 样本数量不足”。**
+
+- 待办：仅允许检验 A.1 已预先采集的结构信号，
+  不事后无限扩 feature search。
+
+
+## 2026-09-21 · OCR Phase A.2b：active-row 机制检验与 content-completeness census
+
+### [L2] active-row 解决了 A.2 的 cover-vs-business-content 单点冲突
+
+- owner_experiment: Phase A.2b
+
+- 预注册：
+  - 在读取 EMM p.1 / CRM p.74 / CRM p.77 active signals 前冻结。
+  - prereg block sha256 =
+    `f48349e609ae2d5cbbe5bf0698962a88f24b9b5a0495e0b2d1daa01af1c60b50`
+  - 预注册方向：
+    cover = 少数大字块 → active-row 较低；
+    distributed diagram/table = 行覆盖更广 → active-row 较高。
+
+- 三页关键实测：
+  - EMM p.1：
+    d40 active_row = `0.1624`
+  - CRM p.74：
+    `0.6389`
+  - CRM p.77：
+    `0.7267`
+
+- 同时 column 方向反向重叠：
+  - EMM p.1 col ≈ `0.6556`
+  - CRM p.74 col ≈ `0.2680`
+  - CRM p.77 col ≈ `0.4551`
+
+- 验证：
+  - A1/A3/A4/A6 row 类特征：
+    LOO POS miss = 0/66；
+    NEG trigger = 0/7；
+    LODO 8/8 documents pass；
+    fold instability = 0。
+  - column 类 A2/A5 不满足。
+
+- **决策：Part A classification = `STRUCTURE_CASE_1`。**
+  在当前 66 POS / 7 NEG / 9-PDF corpus 上，
+  active-row 的分离方向与预注册机制假设一致，
+  并解决了 F1/F2 的 cover-vs-content 冲突。
+
+- **边界：该结果不等于 production V2 已冻结。**
+  NEG 仍只有 7 页；`V2 status` 继续保持 `still_underdetermined`
+  直到 Phase B 明确 production policy。
+
+
+### [L1] `native_text_usable` 与 `page_content_complete` 必须拆成两个概念
+
+- falsified_if: 发现所有已有 chunk / native-text-usable 页面
+  均能完整表示页面上的业务知识。
+
+- 事实：QMM p.110 是首个确证反例：
+  - native body = 1147 chars
+  - 有 chunk
+  - V1 不触发
+  - 页面流程图中的
+    `Concur with parameters for change`、
+    `Identify risk assessment team`、
+    `Close out and Sign Off`
+    在 native/corpus text 中均不存在。
+
+- Phase A.2b 进一步确认：
+  - Part B population = 1197 个“有 chunk、body≥120、V1 不触发”的页面。
+  - review 175 unique pages。
+  - confirmed `VISUAL_KNOWLEDGE_MISSING` = 16 页，
+    横跨 CMM / CRM / EMM / ERM / QMM / SMM 六本手册。
+  - missing 形态包括：
+    图片化评分表、e-learning matrix、流程图、设备图、
+    截图中的时限规则、图形中的热线号码等。
+
+- **决策：**
+  `native_text_usable ≠ page_content_complete`。
+
+- **决策：Phase B 不得再用一个 `page usable` 状态同时表示
+  “已抽到的文本质量正常”和“页面业务内容已完整覆盖”。**
+
+- 方法论记录：
+  这是项目第四次出现“一个字段承担两个不同问题”的同形错误：
+  1. relevance vs match_score
+  2. est_tokens vs est_prompt_tokens
+  3. body usability vs citation metadata correctness
+  4. native_text_usable vs page_content_complete
+
+- **决策：Phase B 至少必须把正文质量、内容完整性、
+  citation metadata correctness 视为独立被测量对象。**
+
+
+### [L2] 第三类 extraction-completeness failure 已确认重复存在，但 prevalence 尚未估计
+
+- 事实：
+  - prioritized sample：14 / 100 `VISUAL_KNOWLEDGE_MISSING`
+  - random control：0 / 50
+  - gold-page census：2 / 28 unique gold pages
+  - 总 confirmed unique missing pages = 16
+
+- **决策：不得把三组比例合并成 corpus prevalence。**
+  prioritized 不是概率样本；random n=50 太小；
+  gold 是 citation-page census，抽样目标不同。
+
+- **决策：第三类 failure 的“存在性与跨文档重复性”已被确认；
+  “全 corpus prevalence”保留为 residual uncertainty，
+  不再作为 Phase B Design Freeze 的 blocker。**
+
+
+### [L2] Gold-page extraction completeness：2/28 页存在视觉知识缺失，但当前 gold 引文证据仍在 corpus 中
+
+- owner_experiment: Phase A.2b / S6 readiness
+
+- 事实：
+  - 38 条 citation → 28 unique gold pages。
+  - 其中：
+    - COMPLETE_NATIVE = 26
+    - VISUAL_KNOWLEDGE_MISSING = 2
+    - VISUAL_NON_TEXTUAL = 0
+    - UNCERTAIN = 0
+  - 两页：
+    - ERM p.14：影响 FL12 / CN03 / ML03
+    - SMM p.38：影响 CN04
+
+- 视觉层缺失示例：
+  - ERM p.14：
+    `In charge of vessel` 等 Line of Communication 图内标签。
+  - SMM p.38：
+    `Check what PPE is required as per the PPE Matrix` 等 toolbox diagram 内容。
+
+- 事实（gold-quote 判据版本）：
+  执行前曾提出「quote fragment MISS → G3」；
+  在实际运行前收紧为：
+  `MISS → G3 candidate，必须与源 PDF 直接比对后方可升格`。
+  理由是 MISS 亦可能来自 normalization、chunking 或 quote 转录差异。
+  本轮所有 fragment 均 HIT，因此该 MISS 分支未被触发。
+
+- 随后对 4 条受影响 gold citation 的 quote fragments
+  在当前 page corpus 中逐条复核：
+
+  - FL12 / ERM p.14：`2/2 HIT`
+  - CN03 / ERM p.14：`1/1 HIT`
+  - ML03 / ERM p.14：`1/1 HIT`
+  - CN04 / SMM p.38：`6/6 HIT`
+
+  合计：`10 / 10 quote fragments HIT`。
+
+- **决策：当前没有观察到 gold citation 的引用证据只能存在于视觉层的 G3 情况。**
+  这 4 条 citation 的 gold quote evidence 均存在于当前 corpus text。
+
+- **边界：这不证明缺失视觉内容与答案完全无关。**
+  它证明的是当前人工 gold citation 所引用的证据可由现有 corpus 支撑。
+
+- **决策：不因第三类 extraction-completeness failure 在 S6 前修改 parser/corpus。**
+  当前 corpus 可继续作为 S6 baseline；
+  第三类 failure 记录为 residual risk，并在后续设计/评测中显式保留。
+
+- **决策：不得把“gold quote HIT”解释为“页面 extraction complete”。**
+  2/28 gold pages 已经证明两者可以同时成立：
+  gold evidence present + page content incomplete。
+
+- **边界（证据强度限制）：10/10 HIT 可能部分受到评测集构造方式影响，
+  因而不是关于整体 extraction completeness 的独立随机证据。**
+  gold citation 的 quote 由人工从 PDF 抄录；
+  `question_anchors` 是否由 parser 可抽取文本生成，
+  此前调查尚未取得足够 provenance 证据，
+  因此继续记为
+  `selection-bias hypothesis remains unresolved`。
+
+- 若该假设成立，则 gold questions / citations 天然更可能落在
+  native extraction 已能暴露的内容上，
+  `"quote 命中 corpus"` 的先验概率会偏高。
+
+- **决策：R2 仍成立。**
+  这里的 R2 只回答：
+  “是否已有证据要求因为第三类 failure 而在 S6 前修改当前 corpus？”
+  当前答案为否，因为已识别的 4 条受影响 citation 的全部 10 个 quote fragments
+  均存在于当前 corpus。
+
+- **决策：不得把 R2 扩大解释为
+  “第三类 failure 对评测无影响”或
+  “当前评测集能够测量 extraction completeness”。**
+
+- 待办：
+  若后续 Phase B / M5 取得 `question_anchors` 生成 provenance，
+  并证实 selection-bias hypothesis，
+  应追加记录并相应收窄本条证据的外推范围。
+
+
+### [L3] 方法论：第 14 类错误在 parser / OCR 调查线新增四个实例
+
+- 事实（承接 2026-09-11 记录的第五次实例，编号续）：
+
+  ⑥ 由「TACM 字体为 Type 3 / uni=no」
+     推出「任何 parser 改动都救不了它」
+     —— 已更正；该实验从未排除 OCR / visual extraction。
+
+  ⑦ 由「TACM p.38–103 无法正常抽取 section」
+     预测「会静默继承 p.37 的 section」
+     —— 实测 50/50 chunk 的 section 来自本页 extraction，
+     0 个 inheritance；
+     机制猜错，且实际 permissive fallback
+     可以把任意字符串变成看似合法的 section。
+
+  ⑧ 由「section 字段计划被 renderer 放入 prompt」
+     推出「模型正在因为 parser section 缺陷被 M2 扣分」
+     —— 实测当时 renderer / citations_correct scorer 均 not implemented；
+     正确表述为
+     `future risk if implemented as specified`，
+     不是 observed current impact。
+
+  ⑨ 由「gold citation 页的 rendered ink signal」
+     试图判断「第三类 page-content-incompleteness 是否影响 M2」
+     —— rendered ink 测的是视觉内容量，
+     page-content completeness 测的是业务知识是否已进入 native/corpus text；
+     两者不是同一个被测量对象。
+     该错误在执行该判据前被指出并收紧，
+     未污染正式测量。
+
+- 推论：承接此前记录，这些实例再次集中发生在
+  “把一个观察写成字段值、判据或因果结论”的落笔位置，
+  而不是原始测量本身。
+
+- **决策：§6.2 第 14 类错误的已记录实例计数更新为 9。**
+
+- **决策：继续执行落笔检查：**
+  “我观察到的那个量，和我要填写/决定的这个字段，是同一个东西吗？”
+
+- **决策：该问题继续作为项目审查流程中的第 6 问。**
+
+- 事实（该检查有效的证据）：
+  - ⑨ 在实验执行前被拦下，因此没有产生错误的正式测量结论。
+  - ⑥⑦⑧ 经后续实验或代码核查后均被更正或收窄。
+
+
+## 2026-09-21 · OCR / parser 调查线关闭
+
+### [L2] Phase A / A.1 / A.2 / A.2b measurement line CLOSED
+
+- owner_experiment: Phase B Design Freeze
+
+- 已关闭的经验问题：
+
+  1. native text 存在但不可用：
+     TACM p.38–103 已确认。
+
+  2. native body 不足但视觉层有业务内容：
+     88 页全量 review 已确认。
+
+  3. native text 可用但页面业务内容不完整：
+     16 个 confirmed examples，跨 6 本手册。
+
+  4. cover vs visual-business-content 的简单 ink overlap：
+     active-row 机制实验得到 `STRUCTURE_CASE_1`。
+
+  5. citation metadata correctness：
+     已证明与 body usability 独立；
+     `title_line_fallback` 是单独 failure surface。
+
+  6. 当前 gold citation 是否因第三类 failure 而缺失引用证据：
+     4 条相关 citation、10/10 quote fragments 均存在于 corpus。
+
+- **决策：不再增加 Phase A.3 / A.4 或继续扩大调查样本。**
+  当前剩余问题主要是 design choices，
+  不是继续测量就会自动得到唯一答案的问题。
+
+- residual uncertainties：
+  - V2 production threshold 仍未冻结。
+  - NEG 样本只有 7。
+  - random completeness control 只有 50。
+  - Claude visual review 不是 independent human ground truth。
+  - 当前结果只作用于这 9 份 PDF，不外推到未来不同文档集。
+  - full-corpus visual-content-missing prevalence 未估计。
+  - question-anchor selection-bias hypothesis 尚未由 provenance 证实或证伪。
+
+- **决策：上述不确定性记录为 residual risk，
+  不再阻塞 Phase B Design Freeze。**
+
+- **决策：下一步不是继续调 detector，而是冻结设计。**
+
+- Phase B 必须明确区分至少三个轴：
+  1. native body quality / usability
+  2. page content completeness
+  3. citation metadata correctness
+
+- OCR 是 failure remediation mechanism，
+  不是这三个状态的同义词。
+
+
+## 2026-09-21 · 测量与生成链 provenance 闭环
+
+### [L1] 承重测量脚本与不可再生 review labels 必须进入 Git
+
+- falsified_if: 无；这是 reproducibility 纪律。
+
+- 事实：
+  - 此前 9a-bis framing template 未入库，
+    导致后续无法精确补测 `D`。
+  - 旧 FMM 只有 per-doc chunk count，没有 per-chunk baseline，
+    导致 +66 chunks 的同源性无法检验。
+  - parser / builder 曾在 corpus 已被大量实验引用时仍处于 untracked 状态。
+
+- 推论：只保存结果 log 或 sha256 不足以保证未来可解释性。
+  特别是人工/reviewer judgment 不可由源 PDF 自动重建。
+
+- **决策：承重测量脚本必须版本控制；
+  不可再生的人工/reviewer judgment 必须随脚本或独立标注 artifact
+  进入版本控制。**
+
+- 已完成：
+  - `9611e9d`
+    `experiment: add reproducible OCR fallback survey`
+    → `scripts/ocr_survey.py`
+
+  - `124403c`
+    `experiment: add reproducible citation section audit`
+    → `scripts/audit_citation_sections.py`
+
+  - `545947a`
+    `feat: add KAIVA PDF parser and corpus builder S5 baseline`
+    → parser + corpus builder
+
+  - `727a20b`
+    `experiment: add reproducible OCR visual survey`
+    → `scripts/ocr_visual_survey.py`
+
+  - `2e8e92c`
+    `experiment: add A.2 visual detector threshold validation`
+    → 88-page review labels + frozen prereg
+
+  - `0df2ede`
+    `experiment: add A.2b content completeness census`
+    → 175-page review labels + frozen prereg
+
+- **决策：可由版本控制脚本与冻结输入一条命令重新生成的 CSV/log
+  可以不进入 Git；
+  生成它们的承重脚本与不可再生 judgment 必须进入。**
+
+- **决策：`545947a → corpus sha 8c6bee0a…`
+  是当前 S5 baseline 的正式生成 provenance。**
+
+
+### [L3] 预注册从“文字纪律”升级为可验证 artifact
+
+- 事实：
+  - A.2 / A.2b 对容易发生 threshold / feature fishing 的分析
+    在查看关键结果之前冻结判据。
+  - A.2b preregistration block 具有独立 sha256，
+    后续结果没有回改该 block。
+
+- **决策：对容易产生 feature fishing / threshold fishing 的实验，
+  优先使用“预注册内容 + sha256 + 写入时间”形成可验证冻结，
+  而不是仅在最终报告中声明“判据事先写好”。**
+
+- **边界：预注册约束的是不得事后修改判据追结果，
+  不是要求忽略反证。**
+  若后续数据推翻预注册中的经验预期，
+  正确动作是保留预注册并报告反证。
+
+
+## 2026-09-21 · 进入 Phase B Design Freeze 前的边界
+
+### [L1] OCR fallback 的设计问题与测量问题正式分离
+
+- falsified_if:
+  Phase B 发现仍存在一个尚未测量、
+  且不能作为 residual risk 记录、
+  会直接改变安全 / 契约设计的 blocker。
+
+- 事实：
+  Phase A measurement line 已关闭。
+
+- 当前尚未拍板的问题包括：
+  - V1 vs V1 + visual 的 production policy
+  - active-row 是否进入 production V2
+  - TACM p.55 benchmark label semantics
+  - form/template content policy
+  - TACM p.38–103 是否值得实际 OCR
+  - OCR preprocessing artifact vs parser-level fallback
+  - OCR determinism / cache / artifact provenance
+  - OCR body quality gate
+  - citation metadata gate
+  - native + OCR merge semantics
+  - page-level audit artifact vs Chunk contract
+  - third-class page-content-incompleteness 的长期处置范围
+
+- **决策：上述问题进入 Phase B Design Freeze，
+  不再通过无边界追加调查来替代架构决策。**
+
+- **决策：Design Freeze 前不实现 OCR、不改 parser、不改 Chunk contract、
+  不改 corpus。**
+
+- **决策：当前采用窄义 R2：**
+  当前没有证据要求仅因第三类 extraction-completeness failure
+  在 S6 之前修改当前 parser / corpus；
+  `8c6bee0a…` corpus 可以继续作为 S6 baseline。
+
+- **边界：R2 不是永久架构决定。**
+  Phase B 若基于 citation safety、merge semantics、
+  provenance 或其他设计约束决定先改 parser，
+  应追加新的决策条目，不回改本条。
+
+- **决策：完整 prompt admission control、OCR fallback、
+  content-completeness policy 与 citation metadata gate
+  都必须遵守同一原则：**
+  被测量对象、状态字段和最终动作不得偷换语义。
+
+- 待办：
+  - Phase B Design Freeze。
+  - Design Freeze 只冻结架构、状态语义、failure semantics、
+    provenance 与 contract boundary。
+  - 对每个提出的状态，只回答：
+    “它能否被一个确定性测试区分出来？”
+    不能 → 该状态需要合并、降级为 `uncertain`，或重新定义。
+  - 完整 test plan 留给 implementation prompt。
+  - Design Freeze 后单独写 implementation prompt。
+  - 若 implementation 修改 parser / extraction text / chunking，
+    必须重建 corpus 并产生新的 corpus sha；
+    所有 corpus-hash-keyed artifact 与相关 S4a.9 measurements
+    必须按真实依赖关系重新生成或重新验证。
