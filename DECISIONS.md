@@ -1750,3 +1750,386 @@
     必须重建 corpus 并产生新的 corpus sha；
     所有 corpus-hash-keyed artifact 与相关 S4a.9 measurements
     必须按真实依赖关系重新生成或重新验证。
+
+
+## 2026-09-22 · Phase B Design Freeze：citation-safe selective OCR ingestion
+
+### [L1] 三个独立问题不得重新压成一个 good/bad 状态：Phase B 冻结五个状态轴
+
+- owner_experiment: S5c / Phase B implementation
+
+- falsified_if:
+  出现一个页面级判断，无法归入下列任一轴，且必须由某一轴兼职回答。
+
+- 事实：Phase A → A.2b 已分别确认三个互不等价的问题：
+  1. native body usability（TACM p.38–103 的乱码正文）
+  2. page content completeness（16 个 confirmed 视觉知识缺失页，跨 6 本手册）
+  3. citation metadata support（`title_line_fallback` 254 页 / 异常候选 96 页）
+  OCR 之后还会多出两个：
+  4. OCR body usability
+  5. content / admission policy
+
+- **决策：Phase B 冻结五个独立状态轴，任何一轴不得兼职回答另一轴的问题。**
+
+  ```
+  native_body_status              : usable / unusable / insufficient / uncertain
+  page_content_completeness_status: presumed_complete / visual_content_suspected / not_assessed
+  ocr_body_status                 : not_attempted / usable / degraded / failed
+  citation_metadata_status        : explicit_supported / uncertain / failed
+  content_policy_status           : admit / hold_for_review / reject_noncontent
+  ```
+
+- **决策：架构上强制 signals → states → actions 三层分离。**
+  detector 层只产生 state，不产生动作；policy 层只读 state，
+  **不得直接读 raw detector signal 决定 corpus action**。
+  该分层的目的是让"一个信号承担业务价值判断"在代码结构上不可能发生，
+  而不是依赖实现者记住一条提醒。
+
+- **决策：`native_text_usable != page_content_complete`；
+  `body usable != citation metadata correct`。** 两条不等式写进状态定义本身。
+
+- **决策：不设 page content `complete` 状态。**
+  没有确定性 signal 能证明"页面内容完整"；完整性只能被内容级人工比对**否证**，
+  不能被信号**证成**。因此只保留 `presumed_complete`（本轮未发现缺失证据）。
+
+- 边界：`remediation_action` 是动作枚举，不是观察，不得与上述五轴混用。
+
+
+### [L1] `citation_metadata_status` 的窄语义：`explicit_supported` 不是 semantic verification
+
+- owner_experiment: S5c / Phase B citation gate
+
+- falsified_if:
+  出现一条把 `explicit_supported` 当作"语义位置已验证"来消费的下游逻辑。
+
+- **决策：冻结 `citation_metadata_status = explicit_supported / uncertain / failed`。**
+
+- **决策：`verified_structural` 是 rejected terminology，不得作为 production state。**
+  该名字过强：现有证据不能证明"显式标签 + 字符完整 + body usable"等价于"语义位置正确"。
+
+- **决策：`explicit_supported` 只表示"存在直接、可追溯的 explicit metadata extraction evidence"。**
+  它明确**不**表示：semantic verification；人工 ground-truth verification；
+  directory / 目录核对；known-section-vocabulary 命中即正确；
+  body usable 即 metadata correct；citation 整体已 verified。
+
+- 反例形状（已实测）：TACM p.100 的 section 值 `"9"` 看起来合法，
+  甚至碰巧属于该文档真实章节集合，但"值合法"不能证明"语义位置正确"。
+
+- **决策：`title_line_fallback` 不自动判 `failed`**（fallback 本身不是错误的直接证据，
+  只进 `uncertain`）；**"看起来奇怪"也不构成 `failed`**（`failed` 只接受明确失败证据，
+  如 page identity mismatch、artifact page mismatch、extraction 过程失败、
+  值明确损坏且无可接受 candidate）。
+
+- **决策：metadata candidate 冲突（native candidate != OCR candidate）一律判 `uncertain`。**
+  禁止：自动优先 native；自动优先 OCR；用 known vocabulary 自动择一；majority vote；silent inherit。
+  两个 candidate 必须同时进入 page-level provenance。
+
+- 边界：`Chapter 15` vs `15` 属 representation difference（既有 audit 38/38 semantic location 一致），
+  不进入本 gate；section canonicalization 属 scorer / renderer 的独立设计问题。
+
+
+### [L2] Phase B OCR architecture 冻结为 Hybrid C
+
+- owner_experiment: S5c / Phase B implementation
+
+- falsified_if:
+  出现一条 parser/build 路径在 build 期间隐式触发 OCR，
+  或 accepted artifact 被静默覆盖。
+
+- **决策：Phase B architecture = Hybrid C。**
+
+  ```
+  源 PDF（immutable）
+    → 岸端独立 OCR execution step
+    → candidate artifact
+    → acceptance
+    → immutable / digest-addressed accepted artifact
+    → parser/build 只消费 frozen artifact
+  ```
+
+- **决策：parser/build 不得隐式运行 OCR。**
+
+- **决策：OCR 不增加船端 runtime dependency。**
+  OCR 与 ingest 只在岸端执行，船端继续只消费冻结产物
+  （依据实施方案既有的岸端/船端分工）。
+
+- **决策：OCR execution 本身允许 nondeterministic；
+  corpus-build determinism 通过"accepted artifact immutable + digest-addressed"
+  与 OCR execution nondeterminism 解耦。**
+
+- 冻结 cache identity：
+  `source_hash`、`pdf_page`、`rasterizer`、`rasterizer_version`、`raster_dpi`、
+  `ocr_engine`、`ocr_engine_version`、`langpack_identity_digest`、`ocr_params_digest`。
+
+- 冻结 accepted artifact identity = `ocr_artifact_sha256`。
+
+- **决策：`source_hash` 继续表示 immutable source PDF 的 SHA256**，
+  与 `ocr_artifact_sha256` 绝不混用；同一个量不得保存为两个 persisted field。
+
+
+### [L2] OCR repeatability 是 IMPLEMENTATION PRECHECK 0，不是新的 measurement round
+
+- owner_experiment: S5c / Phase B implementation
+
+- **决策：OCR repeatability characterization 既不是新的 Phase A measurement round，
+  也不是 Hybrid C 的 architecture blocker。它是 IMPLEMENTATION PRECHECK 0。**
+
+- 执行方式：实现开始后，先对少量固定代表页，在
+  same source / same page / same raster / same OCR engine + version /
+  same langpack / same params 下至少运行两次 OCR，
+  比较 raw OCR text、structured artifact、`ocr_artifact_sha256`。
+
+- **决策：若结果一致，只记录
+  `observed deterministic under tested configuration`，不得外推**
+  到其他配置、其他版本或其他文档集。
+
+- **决策：若结果不一致，不推翻 Hybrid C；
+  不得自动覆盖已 accepted artifact；
+  新输出必须成为新 candidate / 新 digest，并重新走 acceptance。**
+
+- **决策：无论 precheck 结果如何，corpus build determinism
+  仍必须在 frozen artifact 上独立双跑验证。**
+
+
+### [L1] primary body 单 channel invariant：禁止 native + OCR 字符串拼接
+
+- owner_experiment: S5c / Phase B implementation
+
+- falsified_if:
+  出现一个 admitted page 的 primary body 由两个 channel 拼接而成。
+
+- **决策：在 Phase B，同一 admitted page 的 primary body 只能来自一个 channel。**
+
+- **决策：禁止 `native_text + "\n" + ocr_text` 作为 production merge。**
+
+- 理由：直接拼接会造成重复页眉、重复正文、BM25 词频污染、
+  embedding 内容重复、token budget 膨胀，
+  以及 chunk boundary / chunk id 变化难以解释。
+
+- 边界：该问题必须通过结构不变量消除，
+  而不是靠实现者记住一条"不要拼接"的提醒。
+
+
+### [L2] CASE R：`native_body_status == unusable` 的冻结语义
+
+- **决策：**
+  - remediation = `OCR_ATTEMPT`；
+  - OCR body `usable` 后，OCR 是**唯一** primary body channel；
+  - native unusable body 只留 audit，不进入 corpus；
+  - metadata：native candidate 与 OCR candidate **都**进入独立 citation gate；
+  - **不预设 metadata 来源**；
+  - `citation_metadata_status != explicit_supported` → quarantine / review。
+
+- provenance 至少记录：
+  `body_source_channel`、`metadata_source_channel`、
+  `native_metadata_candidate`、`ocr_metadata_candidate`、
+  `metadata_conflict`、`ocr_artifact_sha256`。
+
+
+### [L2] CASE S：`native_body_status == insufficient` 的冻结语义
+
+- **决策：**
+  - production action = **无条件** `OCR_ATTEMPT`；active-row / V2 不门控该动作；
+  - OCR body `usable` 后，OCR 是 primary body channel；
+  - native residual body **不与** OCR body 拼接；
+  - metadata：native candidate 与 OCR candidate **都**进入独立 citation gate；
+  - **不预设 native metadata 更可信**；
+  - 允许 `body_source_channel != metadata_source_channel`；
+  - candidate conflict → `uncertain`；
+  - OCR recovered page 非 `explicit_supported` → quarantine / review。
+
+- **边界：**"这些 insufficient 页的 native header 通常干净"
+  **只是调查观察，不是 architecture invariant**，
+  不得据此在实现中预设 metadata 取自 native。
+
+
+### [L2] CASE A / class-3 scope：Phase B 只建状态与接口，不自动 augment
+
+- owner_experiment: S5c / 后续 M5 或独立设计项
+
+- 事实：A.2b confirmed 16 页 `VISUAL_KNOWLEDGE_MISSING`，跨 6 本手册；
+  其中 2/28 unique gold citation pages 命中（ERM p.14、SMM p.38）；
+  对应 4 条 gold citation 的 quote fragments 10/10 仍存在于当前 corpus。
+
+- **决策：Phase B 不自动实现 class-3 OCR augmentation。**
+  本轮只做三件事：建状态（`page_content_completeness_status`）、
+  写 page-level audit、预留未来 `TextBlock(source_channel=...)` 接口。
+
+- **决策：Phase B 不自动 OCR augment usable-native pages，
+  不设计 native + OCR production merge，不为第三类重写 chunking。**
+
+- **边界：本条不得被解读为"第三类 failure 不重要"或"对 M2 没影响"。**
+  它作为 residual risk 保留：
+  当前 corpus 无法回答只存在于视觉层的业务知识，
+  full-corpus prevalence 仍未估计。
+
+
+### [L2] V1 / V2 / active-row 的 production role
+
+- **决策：V1 是 scoped native-body `unusable` detector**，
+  作用域受语言条件限制（当前语料为 Latin-script 英文手册）；
+  **不得外推为跨语言 universal detector**；作用域外返回 `uncertain`。
+
+- **决策：V2 / active-row / active-column / ink / bbox 正式退出 production OCR gating，
+  全部只作 diagnostic / audit signals。**
+
+- 冻结 production rule：
+
+  ```
+  native_body_status == insufficient  →  OCR_ATTEMPT
+  ```
+
+  **不得写成** `insufficient + active-row trigger → OCR_ATTEMPT`。
+
+- 理由：当前 insufficient population 只有 88 页；OCR 在岸端一次性执行并缓存；
+  false negative 的代价是业务内容继续静默缺失；
+  而 `STRUCTURE_CASE_1` 只在 66 POS / 7 NEG 的 Claude visual-review labels 上成立。
+
+- **边界：`STRUCTURE_CASE_1 != production-proven detector`。**
+  它证明的是 active-row 能解释当前 cover-vs-business-content 的 ink conflict，
+  不证明阈值已 generalize，也不证明 false-positive 行为已被刻画。
+
+
+### [L2] 审计信息进 `ingest/page_quality.jsonl`，不升级 Chunk contract
+
+- owner_experiment: S5c / Phase B implementation
+
+- **决策：Chunk schema 本轮不变；新增 `ingest/page_quality.jsonl`，每个 source page 恰一条。**
+
+- canonical identity：`doc_id`、`source_filename`、`source_hash`、`pdf_page`。
+  `source_hash` = immutable source PDF SHA256；OCR digest = `ocr_artifact_sha256`。
+  **不得把同一个量同时保存为 `source_hash` 与 `source_pdf_sha256` 两个 persisted field。**
+
+- page_quality 至少保存：
+  `native_body_status`、`native_detector_reason`、
+  `native_metadata_candidate`、`native_metadata_source_kind`、
+  visual diagnostics（若计算；diagnostic only）、
+  `ocr_attempted`、`ocr_artifact_sha256`、ocr cache identity（或等价身份串）、
+  `ocr_engine`、`ocr_engine_version`、`ocr_params_digest`、`langpack_identity_digest`、
+  `rasterizer`、`rasterizer_version`、`raster_dpi`、
+  `ocr_body_status`、`ocr_metadata_candidate`、`ocr_metadata_source_kind`、
+  `body_source_channel`、`metadata_source_channel`、
+  `citation_metadata_status`、`metadata_conflict`、`metadata_reason_code`、
+  `page_content_completeness_status`、`content_policy_status`、
+  `remediation_action`、`chunk_ids`。
+
+- `chunk_ids = []` 表示该页最终未进入 corpus。
+
+- **决策（contract-change trigger）：若 implementation 中发现某个 runtime component
+  必须依据这些 page-level quality fields 改变 runtime behavior：
+  STOP → 单独的 contract decision → 不得顺手修改 Chunk。**
+
+
+### [L1] page accounting invariant：每个 source page 必须有终态记录
+
+- falsified_if:
+  存在一个 source page 既不在 corpus 中，也没有 page_quality 终态记录。
+
+- 事实：旧 parser 的 `continue` 使 88 页在无任何记录的情况下消失，
+  其中 66 页经复核含业务视觉内容。
+
+- **决策：1335 个 source page 必须每页在 `page_quality.jsonl` 恰有一条终态记录。**
+
+- **决策：未进入 corpus 的页必须显式落入已定义的 remediation action
+  （quarantine / skip_noncontent / OCR failure 或 degraded 处理等），并带 reason code。**
+
+- 边界：本条是对"silent continue → 88 页无 chunk"这一失败模式的直接修复，
+  不是新增的质量判断。
+
+
+### [L1] 执行顺序冻结：S5c implementation → rebuild corpus → new corpus sha → S6
+
+- owner_experiment: S5c → S6
+
+- falsified_if:
+  Phase B implementation 最终被证明不改变 chunk 集合、chunk text 与 corpus sha。
+
+- 事实：Phase B 已冻结的设计至少会改变：
+  chunk 数、chunk text、chunk length distribution、per-page ordinal、
+  受影响页的 chunk identity、corpus sha。
+
+- 事实：`GoldChunkMap` 的 identity 依赖 corpus / chunk identity。
+
+- **决策：冻结顺序为 S5c / Phase B implementation → rebuild corpus → new corpus sha → S6 GoldChunkMap。
+  S6 当前等待新 corpus。**
+
+- 理由：现在在 `8c6bee0a…` / 3383 上生成 S6 artifact，
+  会得到一个已知马上失效的 artifact。
+
+- **边界：此前 DECISIONS 中的 R2 是"class-3 failure 是否使当前 gold 不可答"的窄义判断。
+  R2 不等于"任何 corpus-changing parser remediation 都应推迟到 S6 之后"。**
+  本条是 Design Freeze 之后新增的 ordering decision，
+  按 append-only 原则追加，**不回改 R2 原条**。
+
+
+### [L2] S5c rebuild 的 invalidation 边界
+
+- **决策：S5c rebuild 后必须失效 / 重做：**
+  `corpus/chunks.jsonl`、corpus sha、chunk count、chunk length distribution、
+  受影响页的 ordinal 与 chunk ID、future `GoldChunkMap`、future `IndexManifest`、
+  以及任何以旧 corpus sha 为 identity / key 的派生产物。
+
+- **决策：必须在新 corpus 上复核：**
+  `experiments/gate2_raw/_s4a9c_final_real_chunks.log`、
+  `experiments/gate2_raw/_s4a9c_overbudget_attribution.log`、
+  `experiments/gate2_raw/_s4a9c_none_observed_deepdive.log`，
+  及它们基于 `8c6bee0a…` / 3383 得到的 budget / estimator-tail 结论。
+
+- **边界：不得写成"所有 S4a.9 结果都作废"。**
+  不受本次 corpus rebuild 直接影响的模型级证据包括：
+  GATE-1、GATE-2、license evidence、CPU/GPU control、language smoke、model artifact digest。
+  只有 corpus-dependent 部分必须在新 corpus 上复核。
+
+
+### [L2] 更正：当前 executable budget contract 与 S4a.9 候选值必须分离
+
+- 事实（本轮直接读取 `core/contracts.py` 求值）：
+  - `MAX_PROMPT_TOKENS = 1050`
+  - `PROMPT_OVERHEAD_RESERVE_TOKENS = 200`
+  - `CONTEXT_PACK_MARGIN = 0.90`
+  - `CONTEXT_PACK_BUDGET_TOKENS = 765`
+  这四个值是**当前代码真实执行值**，即当前 executable contract。
+
+- 事实：S4a.9 / 9c 讨论中的 `950 / 206 / 0.86 → 639` 属于
+  实验测量结果、安全不等式候选与诊断预算状态。
+  9a-bis 条目已写明 `206` "尚未冻结进 contracts"、`639` 为"provisional，不写入 contracts"；
+  9c-final 条目中的 `MAX_PROMPT_TOKENS X = 950` 等是**该实验的冻结输入**，不是 contracts 取值。
+
+- **更正：任何把 `950 / 206 / 0.86 / 639` 叙述或理解为"当前 contracts 已冻结值"的措辞，
+  以本条为准更正为 experimental / candidate 值。**
+  按 append-only，不修改上述历史条目。
+
+- **决策：后续顺序为 S5c rebuild → 在新 corpus 上重跑 corpus-dependent 的 9c-final
+  → 9d safety inequality / budget decision → 若证据支持，再独立 `contract:` commit。**
+
+- **边界：本条不得被解读为"budget contract update 是 S6 的 blocker"。**
+  S6 是否依赖 budget contract，必须在读取实际 `scripts/resolve_gold_chunks.py`
+  与 S6 implementation 之后再判断。
+  当前唯一已冻结的硬顺序是：S5c rebuild → new corpus → S6。
+
+
+### [L3] 关于"950 的证据类型"的检查结果：未发现需要更正的历史措辞
+
+- 事实：本轮检索 DECISIONS 全文，`950` 共 6 处命中，
+  全部出现在派生算式（`B = int((950 - 206) × 0.86) = 639`、slack 核算）
+  或 9c-final 的实验冻结输入清单中。
+
+- 事实：未发现"benchmark / timing log 直接证明 950 PASS"一类措辞，
+  也未发现把 `950` 当作原始测量字段的表述；
+  历史条目已明确把由 pp512/1024/1200 反推的 prompt 上限定位为"候选筛选估算，不直接写入冻结契约"。
+
+- **结论：无需追加"measurement != derived budget decision"的更正条目。**
+  该区分本身仍然成立，并已由上一条（executable contract vs candidate）覆盖。
+
+
+### Design Freeze provenance
+
+- Design Freeze commit：`eed31a3`（design: freeze Phase B citation-safe OCR ingestion）
+- Design Freeze file：`experiments/ocr_survey/_phase_b_design_freeze.md`
+- Design Freeze sha256：
+  `b840ae4590023dbc1ab796eb3ecdea6fc8d1e8292e13b29b5764d4947df896d1`
+- baseline corpus at freeze：
+  `8c6bee0aa952b387e20a2de76253d4384ffe859a8050e6fe8fee9166c956aeaa`，3383 chunks
+- Design Freeze commit 已 push。
+  **本日期块记录的是该已冻结设计，不是重新定义设计**；
+  详细论证与 DF-01…DF-24 冻结表在该文件内，本条目不复制其全文。
