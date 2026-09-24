@@ -2133,3 +2133,245 @@
 - Design Freeze commit 已 push。
   **本日期块记录的是该已冻结设计，不是重新定义设计**；
   详细论证与 DF-01…DF-24 冻结表在该文件内，本条目不复制其全文。
+
+
+## 2026-09-24 · S5c Phase B ingestion 正式关闭与 canonical corpus 冻结
+
+### [L1] frozen OCR input 的真正 identity
+
+- 事实：`FROZEN_OCR_INPUT_SNAPSHOT` 的组成为
+  external manifest = 1、accepted store index = 1、accepted artifact JSON = 140。
+  当前派生 file count = 142。
+
+- **决策：冻结的是 composition，不是总数。142 不是独立规范、不是魔法数字，
+  它只是当前 snapshot composition 的派生值。**
+
+- 事实（本轮更正）：上一轮的 hard gate 写成 `1 manifest + 140 artifacts = 141`，
+  漏掉了 `ocr_cache/accepted/index.jsonl`。
+  实测证明该 index 是当前 production recovery path 的 runtime lookup 入口：
+  `OcrArtifactStore.__init__` → `accepted/index.jsonl` → `self._index`
+  → `accepted_entry()` → `load_accepted()`。
+  临时 store 对照：index + artifacts → load PASS；仅 artifacts、删除 index → `OcrArtifactError`。
+
+- **决策：hard gate 应冻结它所守护的 composition / invariant，
+  而不是脱离语义冻结一个总文件数。**
+
+- **边界：若未来 accepted-store schema 增加必要文件，
+  必须重新判断该文件是否属于 recoverable frozen input，
+  不得只修改 expected total 去迁就 staged count。**
+
+
+### [L2] `ocr_cache/accepted/index.jsonl` 的性质
+
+- 事实：`ACCEPTED_INDEX_RUNTIME_REQUIRED = YES`。
+
+- 事实：`INDEX_REGENERABILITY = BYTE_REGENERABLE`。
+  仅从 140 个 accepted artifact JSON，按 production schema / sorting / serialization
+  可逐字节重建 `index.jsonl`；reconstructed index 与真实 index 的 sha 同为 `8881893c859ee1fb…`。
+
+- **决策：index 是 derived runtime index。它入 Git 的理由不是"包含不可再生信息"，
+  而是 fresh clone 后 production `OcrArtifactStore` 无需额外 reconstruction step
+  即可直接恢复 accepted store。**
+
+- **边界："可再生"与"runtime 不需要"是两个判断，不得混为一谈。**
+
+
+### [L1] OCR artifact durability 已关闭
+
+- 事实：implementation commit = `4683f3264993b19f4d5a730d7674c76552645795`；
+  OCR data commit = `25250146fddf54a9661082595ac877ee2fd1a7f8`。
+
+- 事实：accepted artifact manifest =
+  `experiments/ocr_survey/_phase_b_accepted_artifacts_manifest.jsonl`，
+  sha256 = `c0e5b0371dc315b97d43e1d01d7049e5ee05493bdec3756c07765326efe07337`，
+  accepted artifacts = 140。
+
+- 事实（Git tree static validation）：`M_git == I_git == A_git`，rows = 140，
+  140/140 artifact digest 重算匹配。
+
+- 事实（Git-only dynamic recovery，store 由 Git tree 导出而非 working tree 复制）：
+  target TACM p.60 → PASS；A\T CMM p.32 → PASS；A\T CMM p.112 → PASS；
+  negative control（Git-only store 删除 index.jsonl）→ `OcrArtifactError`。
+
+- **决策：`OCR_ARTIFACT_DURABILITY = DURABLE_IN_GIT`。
+  fresh clone 可恢复构建 `c8978777…` corpus 所需的全部 frozen OCR input。**
+
+- **边界：manifest 解决 identity / verification，Git-tracked artifact + index 解决 recovery。
+  "能发现丢失"与"能够恢复"是两个不同能力，不得用前者代替后者。**
+
+
+### [L1] artifact availability != policy selection != artifact consumption
+
+- 事实（天然反例）：CMM p.32 与 CMM p.112 的 accepted artifact 存在、在 manifest 中、在 Git 中，
+  但 `native_body_status = usable`、`ocr_attempted = false`、`ocr_body_status = not_attempted`、
+  `body_source_channel = native`、terminal action = `ADMITTED_NATIVE`。
+
+- 事实：T = 138、A = 140、C = 138；`T - C = {}`、`C - T = {}`、
+  `A - C = {(CMM,32), (CMM,112)}`。
+
+- **决策：artifact existence / availability 不得作为 OCR policy selection 的输入。
+  accepted artifact 的存在本身不得推动页面进入 OCR path。**
+
+
+### [L1] 三代 corpus identity 与 supersession
+
+- `8c6bee0a…` / 3383 chunks —— role = S5 baseline，status = **SUPERSEDED**。
+
+- `c154a67b264ce38c6c5a65d6e910a5dec2c090af2d3845e21c9db422418ded7b` / 3413 chunks
+  —— role = S5c pre-QA intermediate，status = **SUPERSEDED**。
+
+- `c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb` / 3409 chunks
+  —— role = S5c final，status = **CURRENT_CANONICAL**。
+
+- canonical page_quality =
+  `698428966639264203996f393ea4bc5a1fb03cf19ae1d050450eb6d6b41f7001` / 1335 rows。
+
+- **决策：`corpus/chunks.jsonl` 当前 canonical path 已 promotion 到 `c8978777…` / 3409。
+  任何后续 corpus-dependent measurement 必须使用该 identity，
+  除非后续有新的正式 supersession 记录。**
+
+
+### [L2] S5c final provenance chain
+
+- 冻结生成链：source PDFs + implementation commit `4683f326…`
+  + frozen OCR input data commit `25250146…` + manifest `c0e5b037…`
+  + Design Freeze `b840ae45…` → canonical corpus `c8978777…` / 3409。
+
+- 事实：committed-code independent rebuild A / B 的 chunks 与 page_quality 均逐字节一致。
+
+- 事实：canonical-path verifier = PASS，failures = 0。
+
+- 事实（page accounting）：`ADMITTED_NATIVE 1197` + `ADMITTED_OCR 53` + `QUARANTINED 81`
+  + `SKIPPED_NONCONTENT 4` + `FAILED_INGEST 0` = 1335；
+  chunk-bearing pages = admitted pages = 1250；UNKNOWN-section chunks = 0。
+
+- **决策：S5c corpus identity 不再只绑定 parser code，
+  它绑定 parser implementation + frozen OCR input identity。**
+
+
+### [L3] 独立证据交叉验证：CRM p.3 / p.23 / p.67
+
+- 事实：Phase A.2 的人工视觉 review 把 CRM p.3 / p.23 / p.67 标为 `mostly_header_footer`。
+
+- 事实：S5c post-QA 的通用 OCR structural stripping rule 使同三页 raw OCR 非空、
+  strip 后 body 为空 → `SKIPPED_NONCONTENT`。
+
+- 事实：两条路径时间不同、方法不同、且没有使用页码 special case，却落到同一组三页。
+
+- **决策：记为独立交叉验证证据。**
+
+- **边界：不得反向把 Phase A 的人工标签写进 production rule。**
+
+
+### [L2] OCR body failure reason 与 terminal action 分离
+
+- 事实：CRM p.3 / p.23 / p.67 —— `ocr_body_status = failed`，
+  `ocr_body_reason = ocr_body_empty_after_structural_strip`。
+
+- 事实：TACM p.55 —— `ocr_body_status = failed`，`ocr_body_reason = ocr_text_empty_raw`。
+
+- 事实：engine-failure 路径另有 `ocr_engine_failed_no_artifact`。
+
+- **决策：status / reason / terminal action 是三个不同量。
+  多个不同 reason 可以共享同一个 status，也可以导向同一个 terminal action。
+  reason 不得编码进 terminal-action identity。**
+
+- 事实：该约束由自动化回归测试保护，用于防止此前
+  `ADMITTED_* + REQUIRE_REVIEW` 字符串拼接导致 admission predicate 静默失效的同类故障。
+
+
+### [L2] SECTION_MAX_CHARS 的精确状态
+
+- 事实：`SECTION_MAX_CHARS = 80`，production path 确实执行该 rule，
+  当前触发 6 页：CRM p.75、CRM p.76、CRM p.77、TACM p.117、TACM p.118、TACM p.120。
+
+- 事实（反事实实验）：去掉该 length rule 后，6/6 citation state 不变、6/6 terminal action 不变。
+  原因是这些 candidate 同时为 `title_line_fallback` / `inherited`，
+  `source_kind != explicit_label` 已独立足以把它们判为 `uncertain`。
+
+- **决策：`SECTION_MAX_CHARS_RULE_STATUS =
+  PRODUCTION_ACTIVE_BUT_OUTCOME_REDUNDANT_ON_CURRENT_CORPUS`。**
+
+- **决策：`SECTION_MAX_CHARS_VALUE_SENSITIVITY =
+  INSENSITIVE_WITHIN_CURRENT_CORPUS_INTERVAL_[56,85]`。**
+
+- **边界：不得写"80 不承重"，也不得写"80 决定 CRM p.77 被隔离"。
+  当前证据只支持：rule 在 production path 中 active，但对当前 corpus 的最终 outcome 是 redundant。
+  [56,85] 仅为 current-corpus sensitivity interval，不外推未来文档；
+  不宣称 80 optimal，不宣称 80 uniquely validated。**
+
+
+### [L2] OCR broken-label residual
+
+- 事实：18 / 53 OCR-admitted pages、756 residual chars、0 chunk-boundary changes。
+
+- **决策：`OCR_BROKEN_LABEL_RESIDUAL = DEFERRED_RESIDUAL_RISK`。**
+
+- 不修的理由（两层）：
+  1. 当前量级低；
+  2. 更重要的是，下一步需要 fuzzy matching damaged OCR labels，
+     而当前不存在一个同时满足 deterministic、corpus-independent、doc/page-independent、
+     且在 control 上证明不误删正文的机械规则。
+
+- `falsified_if`：出现满足上述全部条件的确定性规则时，本 residual risk 重新打开。
+
+
+### [L3] native isolated SECTION residual backlog
+
+- 事实：CMM p.2–p.8，7 pages，49 chars。
+
+- 根因：`pdftotext -layout` 在这些页把 SECTION label 与 value 拆成两行，
+  现有结构判据没有将其作为完整 header row 剥离。
+
+- **决策：`NATIVE_ISOLATED_SECTION_RESIDUAL = BACKLOG`。**
+
+- **边界：existing native behavior；not S5c regression；new/old corpus behavior unchanged；
+  outside OCR stripping prereg scope。不在 S5c 顺手修改。**
+
+
+### [L1] 方法论：hard gate 本身也必须可被证伪
+
+- 事实：本轮预设 hard gate 为 `1 manifest + 140 artifacts = 141`，实际 staged 为 142。
+
+- 事实：处理方式既不是改 expected count 去迁就现实，也不是删除"多出来"的文件去迁就 hard gate，
+  而是回到 hard gate 的目标——"fresh clone 是否能恢复 frozen OCR input？"——
+  由代码追踪与负例实验发现 `accepted/index.jsonl` 是当前 runtime recovery path 的必要入口，
+  正确 snapshot 为 manifest 1 + runtime index 1 + artifact payload 140。
+
+- **决策：hard gate 是保护 invariant 的工具，不是事实本身。
+  observation 与 hard gate 冲突时，不能自动假设 observation 错，
+  必须先回到"这个 gate 在守什么"。**
+
+- **决策：以后设计数量型 hard gate 时，优先冻结组成关系 / invariant，
+  总数作为组成关系的派生值报告。组成关系发生合法变化时重新评估 gate，
+  不把旧数字当不可质疑的真理。**
+
+
+### [L1] S5c 正式关闭
+
+- 事实：implementation commit `4683f326…` 已 push；OCR data commit `25250146…` 已 push；
+  frozen OCR input 可由 fresh Git tree 恢复；
+  canonical corpus 已 promotion 到 `c8978777…` / 3409；
+  canonical page_quality = `69842896…` / 1335；canonical verifier = PASS；
+  page accounting = CLOSED；deterministic rebuild = PASS。
+
+- **决策：`S5C_STATUS = CLOSED`。**
+
+- **决策：`NEW_CORPUS_READY_FOR_9C_FINAL = YES`。**
+
+- **决策：`S6_UNLOCK_RECOMMENDATION = NO`** ——
+  新 canonical corpus 上的 S4a.9c-final 尚未运行，之后的 contract decision 亦未完成。
+
+- **决策（执行顺序冻结）：DECISIONS closure → 9c-final on `c8978777…` → contract decision
+  → committed contract verification → S6。**
+
+
+### [L2] 本轮不产生任何 budget contract 结论
+
+- 事实：本轮未修改 `core/contracts.py`，
+  未重新解释 `MAX_PROMPT_TOKENS` / `PROMPT_OVERHEAD_RESERVE_TOKENS` /
+  `CONTEXT_PACK_MARGIN` / `CONTEXT_PACK_BUDGET_TOKENS` / `CHARS_PER_TOKEN_EST`。
+
+- 事实：9c-final 尚未运行，因此当前 executable contracts 保持原值。
+
+- **边界：历史 experimental / candidate values 不得称为 executable contract。**
