@@ -22,6 +22,16 @@ from core import contracts
 # SECTION / 章节标题 / REV. NO.），留到 8 行是为了容纳标题折行与空行。
 HEADER_SCAN_LINES: int = 8
 
+# OCR 通道的页脚扫描窗口。native 通道靠 `-layout` 的 >=2 空格列间隔识别页眉表格行，
+# OCR 文本没有列间隔（整张页眉表被压成单空格的一行），故 OCR 通道另按
+# 【标签结构 + 行位置】剥离，见 `_ocr_structural_line_indices`。
+OCR_FOOTER_SCAN_LINES: int = 3
+
+# OCR 通道单标签行的长度判别式：一条页眉表格行显著短于一句正文散文。
+# 取值依据：S5c post-QA residual census 在 1197 页 native-admitted 正文上的对照
+# （正文里含 "Section" 的句子长度远超此值，且不落在 header/footer 区）。
+OCR_LABEL_LINE_MAX_CHARS: int = 60
+
 # pdftotext 必须带 -layout：默认模式下项目符号会与其正文分离（所有 • 挤成一堆，
 # 内容跟在后面），语义被破坏。
 PDFTOTEXT_ARGS: tuple[str, ...] = ("pdftotext", "-layout")
@@ -534,3 +544,119 @@ def _merge_undersized(chunks: list[str]) -> list[str]:
         tail = merged.pop()
         merged[-1] = f"{merged[-1]}\n\n{tail}".strip()
     return [c for c in merged if c.strip()]
+
+
+# ==============================================================================
+# Phase B：native 通道的页面视图（不改变既有 parse() 的 baseline 行为）
+# ==============================================================================
+
+def iter_native_pages(path: str) -> tuple[list[str], int]:
+    """整份文档的 native 逐页文本 + pdfinfo 页数。
+
+    抛出 contracts.ParseError —— 文件缺失、poppler 失败、页数与分页符数不一致。
+    返回 (pages, expected_pages)；两者长度必须相等（调用方可据此做 page identity 硬门）。
+    """
+    if not os.path.isfile(path):
+        raise contracts.ParseError(f"文件不存在或不是普通文件: {path}")
+    expected = _pdfinfo_page_count(path)
+    pages = _pdftotext_pages(path)
+    if len(pages) != expected:
+        raise contracts.ParseError(
+            f"页数不一致，疑似抽取被截断: pdfinfo={expected} pdftotext 分页={len(pages)}: {path}"
+        )
+    return pages, expected
+
+
+def _section_label_raw_line(page_text: str) -> str | None:
+    """页眉扫描窗口内第一条带 SECTION 标签【且标签后有取值】的原始行。"""
+    for line in page_text.splitlines()[:HEADER_SCAN_LINES]:
+        for key, start, end in _iter_label_spans(line):
+            if key == "section":
+                return line.strip()
+    return None
+
+
+def native_metadata_candidate(page_text: str, meta: dict[str, str | None]) -> tuple[str | None, str, str | None]:
+    """native 通道的 section candidate 及其 provenance。
+
+    返回 (value, source_kind, raw_line)：
+      - source_kind = "explicit_label"        页眉表格里的 SECTION 标签取值
+      - source_kind = "title_line_fallback"   无 SECTION 标签时由页眉标题行推出（legacy 行为）
+      - source_kind = "none"                  本页没有形成 candidate
+    本函数【不判断对错】，只如实报告 candidate 与来源；判定在 citation_gate。
+    """
+    value = meta["section"]
+    if value is None:
+        return None, "none", None
+    raw = _section_label_raw_line(page_text)
+    if raw is not None:
+        return value, "explicit_label", raw
+    for line in page_text.splitlines()[:HEADER_SCAN_LINES]:
+        stripped = line.strip()
+        if stripped and not _is_noise_line(stripped) and not _is_doc_id_token(stripped):
+            return value, "title_line_fallback", stripped
+    return value, "title_line_fallback", None
+
+
+def native_page_view(page_text: str) -> dict[str, object]:
+    """一页 native 文本的结构化视图：正文 + 页眉元数据 + candidate provenance。
+
+    输入假设: page_text 是整份 `-layout` 抽取后按分页符切出的【单页】文本。
+    返回键: body / meta / candidate_value / candidate_source_kind / candidate_raw_line。
+    不做任何状态判定，也不做跨页继承 —— 继承与否由上层 policy 决定。
+    """
+    meta = _extract_page_metadata(page_text)
+    body = _strip_noise(page_text, meta)
+    value, kind, raw = native_metadata_candidate(page_text, meta)
+    return {"body": body, "meta": meta, "candidate_value": value,
+            "candidate_source_kind": kind, "candidate_raw_line": raw}
+
+
+def _ocr_structural_line_indices(lines: Sequence[str]) -> set[int]:
+    """OCR 文本中应当作为页眉/页脚剥掉的行号集合。
+
+    输入假设: lines 是【单页】OCR 文本按行切分的结果。
+    判据（纯结构，不依赖 doc_id / 文件名 / 页码）：
+      - 行位于 header 区（前 `HEADER_SCAN_LINES` 行）或 footer 区
+        （后 `OCR_FOOTER_SCAN_LINES` 行）；且
+      - 该行含 >= 2 个不同页眉标签，或含 >= 1 个标签且长度 <= `OCR_LABEL_LINE_MAX_CHARS`。
+    正文区（两区之外）内含 "SECTION" 字样的句子不在此列，不会被剥掉。
+    本函数只返回行号，不修改文本，也不做任何语义判断。
+    """
+    total = len(lines)
+    indices: set[int] = set()
+    for index, line in enumerate(lines):
+        if index >= HEADER_SCAN_LINES and index < total - OCR_FOOTER_SCAN_LINES:
+            continue
+        labels = {
+            _LABEL_KEY_ALIASES.get(match.lastgroup, match.lastgroup)
+            for match in _LABEL_RE.finditer(line)
+            if match.lastgroup is not None
+        }
+        if not labels:
+            continue
+        if len(labels) >= 2 or len(line.strip()) <= OCR_LABEL_LINE_MAX_CHARS:
+            indices.add(index)
+    return indices
+
+
+def ocr_page_view(ocr_text: str) -> dict[str, object]:
+    """一页 OCR 文本的结构化视图：去页眉页脚后的正文。
+
+    输入假设: ocr_text 是【单页】已接受 OCR artifact 的文本。
+    返回键: body / meta。body 可能为空字符串（"整页都是页眉" 是合法结果）。
+    去噪在 native 流程（`_extract_page_metadata` + `_strip_noise`）之上叠加
+    `_ocr_structural_line_indices`：native 的列间隔判据在 OCR 文本上必然落空，
+    不叠加会把整张页眉表留在 body 里。
+    section candidate 由 citation_gate 的 channel-aware 抽取器从【原始】OCR
+    文本抽取，不受本函数剥离的影响。
+    """
+    meta = _extract_page_metadata(ocr_text)
+    existing: set[int] = meta["_noise_lines"]  # type: ignore[assignment]
+    meta["_noise_lines"] = existing | _ocr_structural_line_indices(ocr_text.splitlines())  # type: ignore[assignment]
+    return {"body": _strip_noise(ocr_text, meta), "meta": meta}
+
+
+def split_body_to_texts(body: str) -> list[str]:
+    """把已选定的 primary body 切成 chunk 文本列表（复用既有分块规则）。"""
+    return _split_page_body(body)
