@@ -5,6 +5,33 @@
 
 部署环境：远洋船舶，完全离线、CPU 推理、船上无 IT 支持。
 
+> README 只做导航（orientation only），**不是 normative source**。与下列文件冲突时以它们为准。
+
+## Source of truth
+
+| 文件 | 角色 |
+|---|---|
+| `DECISIONS.md` | append-only 的决策 / 证据历史 |
+| `core/contracts.py` | 可执行的语义 / 数据契约（当前 `CONTRACTS_VERSION = "0.2.0"`） |
+| `船载离线文档问答系统_实施方案_v0.13.md` | 设计 / rationale |
+| `执行手册_v4.md` | 操作顺序（operational sequence） |
+| `README.md` | 仅导航 |
+
+`experiments/` 下的原始 log / `_runtime.txt` 是 point-in-time evidence，保持原样不回改；
+之后的解读与收窄记录在 `DECISIONS.md`。
+
+## 当前状态
+
+- S5c：**CLOSED**；canonical corpus 已冻结（见下）
+- S4a.9c-final measurement：已完成
+- S6（GoldChunkMap）：**未完成**，当前阻塞于 resolver 与契约对齐 / semantic closure
+- S8：未开始
+
+canonical corpus（`corpus/chunks.jsonl`，不进 Git，按下文重建后用这两个值核验）:
+
+    sha256 = c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb
+    chunks = 3409   (wc -l)
+
 ## 目录
 
 | 路径 | 说明 | 进 Git |
@@ -30,39 +57,26 @@
 ## 语料重建
 
 ```bash
-python3 ingest/build_corpus.py "raw/KAIVA - Manuals" corpus
+python3 ingest/build_corpus.py "raw/KAIVA - Manuals" corpus --cache-dir ocr_cache
 ```
 
-> ⚠️ `ingest/build_corpus.py` **尚未进入本仓库**（当前仅有脚手架）。
-> 上面是既定的调用形式，写在这里是为了让重建方式有唯一说法，不是说它现在能跑。
+`ingest/build_corpus.py` 已在仓库中（完整参数见其 docstring）。它不执行 OCR，只消费
+`ocr_cache/accepted/` 下已冻结的 OCR artifact；产出 `chunks.jsonl`、`page_quality.jsonl`、
+`ingest_report.csv`。重建后用上面的 sha256 / 行数核验是否得到 canonical corpus。
 
-## gold_chunk_ids 回填
+## GoldChunkMap（当前契约架构）
 
-**用途**：`scripts/resolve_gold_chunks.py` 把评测集里每条 citation 解析到具体的
-corpus chunk id 上，让检索层的 Recall@k 变得可测量——没有 `gold_chunk_ids`，
-就无法区分"检索没找到"和"模型没用好"。一次性数据回填工具，仅用标准库。
+以 `core/contracts.py`（`EvalItem` / `GoldChunkMap`）为准，要点：
 
-**输入 / 输出**：
+- `EvalItem` **不含** `gold_chunk_ids`；评测集里的 citations 是人工事实，不可再生。
+- citations 在某套语料 + 分块配置上的投影是独立的 `GoldChunkMap`：派生产物，可再生，不进评测集。
+- `mapping` 只包含 `expected=="answer"` 的题。
+- 逐 citation 的 match level 的权威记录是 `.report.csv`；`GoldChunkMap` 不含 match levels。
 
-```bash
-python3 scripts/resolve_gold_chunks.py \
-  --chunks      <corpus 的 chunks.jsonl> \
-  --testset     eval/testset_v5_2.jsonl \
-  --out-testset <解析后的评测集：独立文件名，见下> \
-  --out-report  <逐 citation 的 CSV 审计报告>
-```
-
-两个输入文件都只读，工具不回写输入。匹配按 L1 → L2 → L3 → L4 顺序进行，
-首个命中即止并记下 `match_level`；L4 是兜底不是匹配，标 `needs_review`。
-
-**FAIL 不得静默接受。** FAIL 的含义是该 `(doc_id, pdf_page)` 下根本没有 chunk，
-即引文写错了、页码写错了，或解析器丢了那一页。它是信号不是噪声：必须逐条查到底，
-不允许因为"只有几条"就放过。
-
-**第一轮不要覆盖 `eval/testset_v5_2.jsonl`**：`--out-testset` 用独立文件名，
-核验通过之后再决定哪个文件是 canonical。`gold_chunk_ids` 究竟回写进评测集本身、
-还是外置为派生产物，是一个待拍板的契约变更（见 `DECISIONS.md` 2026-09-07 补充 5）；
-仪式走完之前，本文件不写死输出路径约定。
+**S6 未完成，GoldChunkMap 尚未生成。**
+`scripts/resolve_gold_chunks.py` currently requires alignment with contracts v0.2.0
+before formal S6 GoldChunkMap generation —— 现有脚本仍按旧方式把 `gold_chunk_ids`
+回填进评测集（`--out-testset`），不是上述架构。
 
 ## 纪律
 
