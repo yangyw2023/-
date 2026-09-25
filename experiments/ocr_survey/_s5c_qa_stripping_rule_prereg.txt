@@ -1,0 +1,42 @@
+==== OCR header/footer stripping rule PREREGISTRATION（实现前写下，看修复结果前冻结） ====
+
+[判定] HEADER_RESIDUAL_MATERIALITY = MATERIAL
+  依据（census，判据先于统计冻结）：
+   - 56/56 OCR-primary admitted 页存在 structural residual；
+   - residual_char_ratio p50=0.165 / p95=0.413 / max=0.978；总计 6461 chars ≈ 1639 est tokens / 69051 body chars；
+   - counterfactual：剥离后 4 页 chunk 边界改变（CRM p3/p23/p67 由 1→0 chunk，SMM p71 3→2）；
+   - 50/56 页的 section 值同时出现在 metadata 与 body（结构信息重复）。
+  native control：185 页命中属 legitimate_repeated_business_text（章节标题行、正文 "Refer to: Section X."、
+  修订表列头），非页眉残留 —— 故本规则只作用于 OCR channel。
+
+[规则] 只在【OCR channel】的 body 抽取中生效（native channel 行为完全不变）：
+  一行被剥离，当且仅当同时满足：
+   R1 该行位于 header 区（前 HEADER_SCAN_LINES=8 行）或 footer 区（后 3 行）；
+   R2 该行含 parser 既有标签集合（DOCUMENT ID / ISSUED BY / SECTION / REVISION NO / REV NO /
+      PAGE NO / ISSUE DATE）中的标签，且
+      (a) 同一行含 >= 2 个不同标签，或
+      (b) 该行长度 <= 60 字符（散文句显著更长；该判别式已在 1197 页 native control 上检验）；
+   R3 既有 _NOISE_RES（UNCONTROLLED WHEN PRINTED / Page N of M）保持原样、位置无关地继续生效。
+  规则不依赖 doc_id / filename / pdf_page；不做全文 string replace；只按【行位置 + 标签结构】删除整行。
+
+[A–G 自检]
+  A 来自 explicit structural label + header/footer region ✓
+  B 跨文档通用（标签集合来自既有 parser 常量）✓
+  C 无 doc/page 依赖 ✓   D 非 global replace，按行位置 ✓   E 可由确定性测试验证 ✓
+  F 只作用于 OCR channel，native 语义不变 ✓   G 不改 page identity；metadata candidate 仍从原始 OCR 文本抽取 ✓
+
+[预期]
+  expected affected pages          = 56 OCR-primary admitted 页 + 82 OCR quarantine 页的 body 统计
+  expected failure mode fixed      = OCR body 中重复的页眉表格行被移除；section 值不再同时出现在 body 与 metadata
+  expected non-target unchanged    = 1197 native admitted 页的 chunk 文本与数量逐字节不变；
+                                     native control 命中的 185 页不受影响
+  expected chunk delta             = 约 -4（CRM p3/p23/p67 降到 CHUNK_MIN_CHARS 以下 → 不再入库；SMM p71 3→2）
+  expected citation gate 结果      = 不变（metadata candidate 从原始 OCR 文本抽取，不受 body 剥离影响）
+
+[falsified_if]
+  - native admitted 页的 chunk 文本或数量发生任何变化；
+  - 任何页的 citation_metadata_status / metadata candidate 因 body 剥离而改变；
+  - 正文中间（非 header/footer 区）的 "Section X" 被删除；
+  - page identity / body_source_channel 改变；
+  - 剥离后 OCR body 仍含 >= 1 条 structural_label_line residual。
+==== END ====
