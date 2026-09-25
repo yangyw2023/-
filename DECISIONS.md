@@ -2375,3 +2375,272 @@
 - 事实：9c-final 尚未运行，因此当前 executable contracts 保持原值。
 
 - **边界：历史 experimental / candidate values 不得称为 executable contract。**
+
+
+## 2026-09-25 · S4a.9c-final measurement 冻结、contract architecture review 与 S6 并行化
+
+### [L1] evidence taxonomy 纪律
+
+- **决策：本日期块起，任何作为 decision evidence 的数字必须标注
+  `MEASURED` / `ESTIMATOR_OUTPUT` / `DERIVED` / `NOT_VERIFIED` 四类之一，不得新增第五类。**
+  每个关键数字必须能指向 source artifact + locator（必要时附计算式）。
+
+- **决策：任何在对话 / DECISIONS / 文档中反复出现并承担推导作用的数字，
+  必须能机械指回原始 evidence artifact。找不到即 `NOT_VERIFIED`，
+  并立即停止作为事实参与任何推导。**
+
+### [L1] 更正：`306 tokens/chunk` 从未被测量
+
+- 事实（机械搜索）："306" 作为 per-chunk token 数只定位到
+  `experiments/gate2_raw/_s4a9a_bis_context_framing.log:20`
+  （`provisional k_est = 639 // 306 = 2`）与 `:27`
+  （`k_est 按 306 tok/chunk 估算，而 CHARS_PER_TOKEN_EST=4 尚未校准`）。
+  该 artifact 自述为估算；**不存在任何 measurement artifact 证明
+  actual median chunk token count = 306**。
+
+- **决策：`306_EVIDENCE_STATUS = NOT_VERIFIED`。
+  不得继续用于 actual chunk-size statement、realized-k inference、
+  F/c sensitivity、packing budget 或 contract numeric decision。**
+
+- 正式区分四个 median：
+  - old actual chunk-token median = **188** · `MEASURED` ·
+    `_s4a9c_final_real_chunks.log:21` · superseded corpus `8c6bee0a…` / 3383
+  - new actual chunk-token median = **189** · `MEASURED` ·
+    `_s4a9c_final_canonical_chunks.csv` · canonical corpus `c8978777…` / 3409
+  - new est_tokens median = **274** · `ESTIMATOR_OUTPUT` · 同 CSV
+  - new actual rendered-token median = **199** · `MEASURED` · 同 CSV
+
+- **边界：本条不否定旧 measurement 本身，只撤销所有以
+  "306 是 measured chunk token statistic" 为前提的推导。**
+
+### [L1] canonical 9c-final measurement 已冻结并单独入库
+
+- 事实：measurement commit = `657387461e64abda3c393182092877deaed338a8`
+  （`experiment: measure canonical corpus token packing`，9 文件，已 push，在 HEAD ancestry）。
+
+- 事实：canonical corpus = `c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb` / 3409；
+  canonical page_quality = `698428966639264203996f393ea4bc5a1fb03cf19ae1d050450eb6d6b41f7001` / 1335；
+  accepted artifact manifest = `c0e5b0371dc315b97d43e1d01d7049e5ee05493bdec3756c07765326efe07337`。
+
+- 事实：Run 1 / Run 2 的 input identity 逐项一致，六个 deterministic output 逐字节一致
+  → `RUN_REPEATABILITY_STATUS = DETERMINISTIC_MEASUREMENT_PASS`。
+
+- **决策：measurement 是 evidence，contract update 是 decision，
+  二者必须处于不同 commit / 不同轮次。本轮 measurement 已单独 commit，未夹带任何 contract 变更。**
+
+### [L2] 更正：`est_over_but_actual_safe = 0` 是结构必然，不是经验证据
+
+- 事实（`core/contracts.py` `pack_context()` prefix 语义）：
+  `for hit in hits[:max_chunks]: t = hit.chunk.est_prompt_tokens();
+  if packed and used + t > max_tokens: break; packed.append(hit); used += t`。
+  注意 `packed and` 守卫 —— 首块无条件入选，故 `sum(est) <= max_tokens` 并非无条件成立。
+
+- 事实（`MEASURED`，canonical chunks CSV）：current corpus `max est_prompt_tokens = 392`；
+  `est_prompt_tokens > 765` 与 `> 639` 的 chunk 数均为 **0** → 首块例外不可能触发。
+  `DERIVED`：CURRENT `200 + 765 = 965 <= 1050`；HISTORICAL CANDIDATE `206 + 639 = 845 <= 950`。
+
+- **决策：`EST_OVER_BUT_ACTUAL_SAFE_STATUS =
+  STRUCTURALLY_ZERO_ON_CURRENT_CORPUS_AND_PROTOCOL`。
+  `est_over_but_actual_safe = 0` 不得作为 estimator quality 的 empirical evidence。**
+
+- **决策：`est_safe_but_actual_over` 仍有 empirical information。
+  CURRENT executable scenario = 35 / 3405 windows（`MEASURED`），
+  含义是「packer 依据 estimator 判为安全并已 admit 的 context 中，
+  有 35 个实际 rendered token cost 超出真实 prompt budget」。
+  两个方向的计数不得对称解释。**
+
+### [L2] estimator failure shape（canonical，`MEASURED`）
+
+- text actual/estimated：p50 = 0.7784 · p95 = 1.087 · p99 = 1.455 · max = 2.0000
+- rendered actual/estimated：p50 = 0.7755 · p95 = 1.049 · p99 = 1.372 · max = 1.664
+- dangerous tail：text > 1.15 = **129 / 3409**；rendered > 1.15 = **110 / 3409**
+- 方向约定：`ratio = actual / estimated`；> 1 = estimator 低估 = 危险侧；< 1 = 保守。
+
+- **边界：中位行为保守不得推出 tail behavior 安全。**
+
+### [L3] dangerous tail 的文档富集：只是 observation
+
+- 固定 population：text actual/estimated > 1.15，T = 129；N = 3409。
+  enrichment = (tail_share) / (corpus_share)，全部文档如下（`MEASURED` + `DERIVED` 比值）：
+
+  | doc_id | corpus_chunks | corpus_share | tail_chunks | tail_share | enrichment |
+  |---|---|---|---|---|---|
+  | CMM | 391 | 0.1147 | 14 | 0.1085 | 0.946 |
+  | CRM | 256 | 0.0751 | 4 | 0.0310 | 0.413 |
+  | EMM | 344 | 0.1009 | 2 | 0.0155 | 0.154 |
+  | ERM | 377 | 0.1106 | 7 | 0.0543 | 0.491 |
+  | FMM | 883 | 0.2590 | 59 | 0.4574 | 1.766 |
+  | NPM | 286 | 0.0839 | 2 | 0.0155 | 0.185 |
+  | QMM | 423 | 0.1241 | 6 | 0.0465 | 0.375 |
+  | SMM | 304 | 0.0892 | 1 | 0.0078 | 0.087 |
+  | TACM | 145 | 0.0425 | 34 | 0.2636 | **6.197** |
+
+- 只允许陈述：**TACM 与 FMM 在观察到的 dangerous tail 中富集（TACM 6.20×，FMM 1.77×）。**
+  不得写"因为表格多 / layout 特殊 / 是 estimator failure 的原因 / 应按 document 建 estimator"。
+
+- **决策：`DANGEROUS_TAIL_DOC_ENRICHMENT = OBSERVATION_ONLY`。**
+
+- **边界：该结果意味着 "native vs OCR" 未必是唯一或正确的 conditioning variable ——
+  富集最强的 TACM 只有 3 个 OCR chunk，文档维度的解释力独立于 channel 维度。**
+
+### [L2] native vs OCR：candidate 支持，architecture 未证明
+
+- `MEASURED`：native n=3333 · ratio p50 = 0.7748 · p95 = 1.0546 · max = 1.7333 · >1.15 = 117
+- `MEASURED`：OCR n=76 · ratio p50 = 0.9258 · p95 = 1.2193 · max = 2.0000 · >1.15 = 12
+- `PER_CHANNEL_ESTIMATOR_CANDIDATE_SUPPORTED = YES`
+- **`PER_CHANNEL_ESTIMATOR_ARCHITECTURE_PROVEN = NO`**
+
+- 未排除的 alternative explanations（至少）：whitespace density（OCR p50 = 0.1696 vs
+  native 0.2766，`MEASURED`）、document composition（见上表）、chunk length、chunk ordinal、
+  punctuation density、table-like text、OCR spacing artifacts。
+
+- **决策：不得冻结 conditioned estimator。**
+
+### [L2] OPTION_C = tokenizer-specific exact-cost artifact：C1 与 C2 必须分开
+
+- **C1（exact token count 写入 Chunk schema）**：corpus schema 与 tokenizer 耦合；
+  corpus identity 与 tokenizer/model identity 绑定；换 tokenizer/model 可能要求 corpus rebuild；
+  GoldChunkMap 等 corpus-keyed identity 的 invalidation 需重新评估。
+
+- **C2（独立 sidecar artifact）**：identity =
+  `(corpus_sha256, tokenizer_identity_digest, counting_protocol_digest)`。
+  corpus 保持 tokenizer/model independent；换 tokenizer → 只重建 sidecar，不重建 corpus；
+  换 corpus → sidecar 必然 invalid；船端只消费 frozen integer cost，不安装 tokenizer runtime。
+
+- 事实：canonical measurement chunks CSV 已构成 3409 行的 C2 原型 ——
+  deterministic、双跑逐字节一致、tokenizer identity 已知、corpus identity 已知、counting protocol 已知。
+  → **`OPTION_C2_PROTOTYPE_EVIDENCE = AVAILABLE`**
+
+- **决策：`OPTION_C_SELECTED = NO`。本轮不修改 Chunk schema / IndexManifest / packing implementation。**
+
+### [L2] citation header 的双向误差
+
+- `ESTIMATOR_OUTPUT`：`CITATION_HEADER_EST_TOKENS = 14`
+- `MEASURED`（canonical chunks CSV）：actual header increment p50 = 10 · p95 = 13 ·
+  p99 = 16 · max = 28；> 14 的 chunk = **106 / 3409**
+
+- **边界：14 同时是绝大多数 chunk 上的 conservative overestimate 与少数 chunk 上的 underestimate。
+  本轮不选择新的 header constant。若未来采用 exact rendered-cost sidecar，
+  该双向误差可由 per-chunk exact rendered cost 取代。**
+
+### [L3] separator 不确定性关闭（scope 受限）
+
+- `MEASURED`：SEP `"\n"` 与 `"\n\n"` 的真实相邻 rendered chunk 增量成本
+  **max = 1 token**（n = 3408，两候选一致）。
+- **决策：`SEPARATOR_UNCERTAINTY_STATUS = CLOSED`，scope =
+  current tokenizer identity + current renderer + 已测 SEP 候选。不外推到未来 tokenizer / renderer。**
+
+### [L1] token budget 的校准目标设备
+
+- 事实（机械恢复自既有规范记录）：`DECISIONS.md:391–392` —— 船端 x86 无 Accelerate、
+  无 Apple 统一内存带宽，M0（2026-08-17）估算 x86 CPU 为 35–85 t/s；
+  `core/contracts.py:207` —— 船端 CPU 会放大数倍；
+  `core/contracts.py` `TTFT_BUDGET_S = 10.0`（owner_experiment: M6）。
+
+- **决策：`TOKEN_BUDGET_CALIBRATION_TARGET_DEVICE = VESSEL_X86_CPU_NO_GPU`。**
+
+- **决策：`PRODUCTION_GPU_PREFILL_MEASUREMENT_REQUIRED = NO`。**
+  **更正：上一轮 architecture review 曾把「phi4-mini GPU prefill 实测」列为待补测量，
+  该建议基于开发机的运行形态而非项目的目标设备约束，按本条收回。**
+
+- **边界：development Mac CPU-only benchmark != vessel x86 CPU benchmark；
+  development GPU benchmark != vessel production benchmark。**
+
+### [L2] overbudget 的后果必须分三层记录
+
+- `MEASURED`：CURRENT executable scenario overbudget = 35 / 3405 = 1.03%，max overage = **+338 tokens**。
+- `MEASURED`：HISTORICAL candidate（NOT EXECUTABLE CONTRACT）overbudget = 19 / 3405 = 0.56%，
+  max overage = **+203 tokens**。
+- `MEASURED` / `DEVELOPMENT_MACHINE_CPU_ONLY`：phi4-mini prefill ≈ 94.60–97.33 t/s
+  （`_s4a9b_ttft_fine.log:42–46`、`_s4a9b_ttft_sweep.log:42–46`；`_runtime.txt` 记录 `bench_args=-ngl 0 -t 8`）。
+- `DERIVED`（公式 `Δt = Δtokens / rate`，仅开发机 CPU-only 口径）：
+  338 / 94.60 ≈ 3.57 s；338 / 96.70 ≈ 3.50 s；203 / 94.60 ≈ 2.15 s；203 / 96.70 ≈ 2.10 s。
+
+- **决策：`VESSEL_TTFT_CONSEQUENCE = NOT_VERIFIED`。**
+  只能写"在开发机 CPU-only evidence 下，+338-token max overage 对应约 +3.5 s；
+  该换算不外推到船端 x86 CPU"，**不得写"生产请求会多等约 3.5 秒"**。
+
+### [L2] 历史船端性能估计的边界
+
+- 事实：`DECISIONS.md:392` 的 x86 CPU 35–85 t/s 自述为 **M0 估算**
+  → `evidence_type = DERIVED / ESTIMATE`，**不得升级为 MEASURED**。
+- `DERIVED`：`1050 / 85 ≈ 12.35 s`；`1050 / 35 = 30.0 s`，对照 `TTFT_BUDGET_S = 10.0`。
+- **只允许记录：历史船端性能估计与当前 10 s prompt budget 之间存在待真实硬件验证的 tension。
+  不得写"船端实际 TTFT 是 12–30 秒"。**
+- **决策：`VESSEL_X86_PREFILL_MEASUREMENT_REQUIRED = YES`，owner = M6 / real target hardware calibration。
+  若目标船端硬件在 M6 前不可用，`NUMERIC_LATENCY_CONTRACT_FINALIZATION` 必须保持 provisional。**
+
+### [L1] S6 依赖与 invalidation 审计闭合
+
+- 事实（`scripts/resolve_gold_chunks.py` AST 审计，imports 仅
+  `argparse, csv, json, re, sys, typing`）：
+  - `DIRECT_DEPENDENCY`：`corpus/chunks.jsonl`、corpus identity、`chunk.id`、`doc_id`、
+    `pdf_page`、`section`、`text`、quote matching、testset citations
+  - `NOT_DEPENDENCY`：`CHARS_PER_TOKEN_EST`、`CONTEXT_PACK_MARGIN`、
+    `CONTEXT_PACK_BUDGET_TOKENS`、`MAX_PROMPT_TOKENS`、`CITATION_HEADER_EST_TOKENS`、
+    `TOP_K_CONTEXT`、`pack_context`、tokenizer、retriever、renderer、scorer、`core.contracts`
+
+- **决策：`TOKEN_BUDGET_CHANGE_INVALIDATES_GOLD_CHUNK_MAP = NO`**，
+  条件为 corpus / chunk identity / text / doc / page 保持不变。
+
+- **决策：`S6_BLOCKED_BY_CONTRACT_DECISION = NO`；
+  `S6_CAN_PROCEED_IN_PARALLEL_WITH_CONTRACT_DECISION = YES`。**
+  并行成立需同时满足两条，本轮均已机械证明：
+  (1) S6 不依赖 token-budget contract；(2) token-budget-only 变更不 invalidate GoldChunkMap。
+
+- **边界：若未来 Contract Decision 改动 chunking / corpus text / chunk IDs / doc-page identity，
+  必须重新评估 GoldChunkMap invalidation。**
+
+### [L1] ordering narrowing：token-contract line 与 S6 line 在 canonical freeze 后分叉
+
+- 旧 ordering（不回改）：S5c → rebuild → canonical corpus → token-budget decision → S6。
+
+- 当前机械 evidence：S5c = CLOSED；canonical corpus = `c8978777…` / 3409；
+  S6 dependency audit 显示 token-budget contract 非依赖；
+  invalidation audit 显示 token-budget-only change 不 invalidate GoldChunkMap。
+
+- **决策：自 canonical freeze 起正式分叉 ——**
+
+      canonical S5c corpus ──┬─ S6 / GoldChunkMap
+                             └─ token-contract line
+
+  token-contract line = architecture review → real retrieval evidence →
+  vessel hardware calibration（可用时）→ Contract Decision → optional implementation →
+  numeric contract freeze。
+  **S6 不再等待 token numeric decision。**
+
+### [L1] 方法论：结论不得因为"更保守"就超过证据支持的范围
+
+- 事实：本项目已多次出现 append-only narrowing ——
+  implementation-before-S6 的前置关系后被细化；
+  "native body usable/clean" 不能推出 "metadata correct"；
+  本轮 "S6 被 token-budget Contract Decision 阻塞" 的 ordering
+  经 code dependency + invalidation audit 后被收窄。
+
+- 共同形状：当时为了"安全"，把结论 / dependency / blocker 写得比 evidence 更宽。
+
+- 后果：不一定造成 correctness failure，但会制造不必要串行、延迟后续阶段、
+  重复 measurement / review，并把本来独立的问题错误地绑在一起。
+
+- **决策："保守"不是扩大结论范围的许可证。一个 blocker / dependency 必须能回答：
+  (1) 下游实际读取了什么？(2) 上游变化是否真的 invalidate 下游 artifact？
+  两者都不能机械证明时，不得把"为了安全"升级为 hard dependency。**
+
+- **边界：该纪律与"证据不足却下太强的因果/字段结论"互补 ——
+  前者防止结论过强，本条防止 blocker 过宽。两者共同要求：
+  conclusion strength == evidence strength，不多也不少。**
+
+### [L2] contract line 的 readiness
+
+- **决策：`CONTRACT_ARCHITECTURE_DECISION_READY = YES`；
+  `NUMERIC_CONTRACT_DECISION_READY = NO`。**
+
+- 仍需：
+  - **A. `REAL_RETRIEVAL_WINDOW_MEASUREMENT_REQUIRED = YES`** ——
+    判断 sequential-window simulation 的 realized k、overbudget rate、tail shape
+    是否代表 production retrieval。
+  - **B. `VESSEL_X86_PREFILL_MEASUREMENT_REQUIRED = YES`** ——
+    owner = M6 / target hardware calibration；用于校准真正的 vessel TTFT / prompt budget。
+    **不是 GPU measurement。**
+  - **C. `PER_CHANNEL_MEASUREMENT_REQUIRED = CONDITIONAL`** ——
+    仅当下一轮仍认真考虑 Option B conditioned estimator 时才需要；**不得因此阻塞 S6。**
