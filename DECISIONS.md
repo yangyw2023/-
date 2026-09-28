@@ -3025,3 +3025,130 @@ testset `05614407…` / 39；accepted OCR manifest `c0e5b037…`。
   corpus sha；testset 有运行前后比对，corpus 没有加载后的复核。
 - **`GOLD_CHUNK_MAP_GIT_TRACKING = PENDING_DECISION`**，owner：formal S6 Phase E。事实（`MEASURED`）：
   `eval/gold_chunk_map/` 不在 `.gitignore` 中，提升后会显示为 untracked；契约允许 GoldChunkMap 不进 Git（可再生）。
+
+## 2026-09-28 · Formal S6 closure / canonical GoldChunkMap freeze
+
+作用域：contracts `d30ed34`（v0.3.1）；resolver `8719761`；manual alignment `7c8ef4a`（formal run 时的 HEAD）；
+canonical corpus `c8978777…` / 3409；testset `05614407…` / 39；page_quality `69842896…` / 1335。
+证据标记沿用本文件纪律（`MEASURED` / `DERIVED` / `CODE_FACT` / `CONTRACT_FACT`）。
+Run A / Run B 与独立审计的原始日志位于执行会话的 scratch 目录，**未入库**；
+下文 level 计数与 mapping 计数可由已提交的 map 与 report.csv 直接复核（locator 见各条）。
+
+### [L1] Formal S6 acceptance
+
+- 事实（`MEASURED`）：Run A / Run B 为两个独立进程、两个全新目录，执行同一条 committed CLI 命令；
+  `RC_A = 0`，`RC_B = 0`（`$?` 直接取值，未经管道）。
+- 事实（`MEASURED`）：map A == map B 逐字节一致；report A == report B 逐字节一致（`cmp` 均为 0）。
+- 事实（`MEASURED` · locator：已提交 report.csv 的 `match_level` / `needs_review` 列）：
+  **L1 = 30 / L2 = 8 / L3 = 0 / L4 = 0 / AMBIGUOUS = 0 / FAIL = 0**；needs_review = true 0 条 / false 38 条。
+- 事实（`MEASURED` · locator：已提交 map + `eval/testset_v5_3.jsonl`）：
+  **answer qids in mapping = 31/31；refuse qids in mapping = 0/8**；mapping 无空值，键按评测集顺序、值按 corpus 顺序。
+- 事实（`MEASURED` · 独立审计，不 import resolver，按契约定义重新计算片段、同页候选与**全部**最小基数 cover）：
+  **EXACT_PAGE_PROVENANCE_VIOLATIONS = 0；minimum-cover ties = 0**；每页候选 universe ≤ 3；
+  multi-fragment citations = 20（L1 12 / L2 8）；formal associations = 47；unique formal chunks = 39。
+- 事实（`MEASURED`）：`validate_gold_chunk_map(..., builder=ingest.builder_identity)` 对 Run A 产物与提升后的
+  canonical 路径各执行一次，均 PASS。与执行手册 S6.2 参考值（39 / 31 / 8 / 38 / 94 / L1 30 / L2 8 / 47 / section 不一致 3）无差异。
+- **决策：`FORMAL_S6_ACCEPTANCE = PASS`；`GOLD_CHUNK_MAP_PROMOTION = PASS`；`S6_STATUS = CLOSED`。**
+- falsified_if: 从已提交的 map / report.csv 复核出任一 answer citation 不是 L1/L2，
+  或同一冻结输入下 resolver 不能逐字节再生这份 map / report。
+
+### [L1] Canonical GoldChunkMap identity
+
+- map path：`eval/gold_chunk_map/map__ts-v5.3__corpus-c8978777__builder-kaiva_phase_b_builder_v1.json`
+- map sha256：`8cf9f3be1b1bc296c196d1b5598c1351d456f83b1a05a6043c7b643f0fedeacc`（2026 bytes / 120 lines）
+- report path：`eval/gold_chunk_map/map__ts-v5.3__corpus-c8978777__builder-kaiva_phase_b_builder_v1.report.csv`
+- report sha256：`f48018cbe88de3d379fb65c17e75e6b8a87eebdc8dd19bdd539356bfff5a2572`（17897 bytes / 39 lines）
+- map identity 字段（读自 map 本身）：
+  - `testset_version` = `v5.3`
+  - `testset_sha256` = `05614407a0e43a7f912ae17864892b0f069a22d1ad9d1ec2bfb7362150883e8b`
+  - `corpus_chunks_sha256` = `c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb`
+  - `contracts_version` = `0.3.1`
+  - `corpus_builder_name` = `kaiva_phase_b_builder_v1`
+  - `construction_rules_sha256` = `e89e6f94ec80abdc458622a52587644dc72baaadeb6564606ddc273c2951c5a1`
+  - `chunker_config` = `chars_per_token_est=4;chunk_min_chars=120;chunk_target_tokens=350`
+- 事实（`MEASURED`）：map 文件字节 == `serialize_gold_chunk_map()` 对其解析结果的输出；
+  文件名 == `GoldChunkMap.filename()` / `report_filename()`。
+  文件名只编码 testset_version、corpus sha 前 8 位、builder 名；其余 identity 只在 map 字段里。
+
+### [L1] GoldChunkMap durability
+
+- **决策（人工）：`GOLD_CHUNK_MAP_DURABILITY_POLICY = TRACK_CANONICAL_MAP_AND_REPORT_IN_GIT`。**
+- 理由：
+  - GoldChunkMap 是 derived / reproducible artifact；
+  - Formal S6 已证明相同冻结输入下可逐字节重建（Run A == Run B）；
+  - 它不是 EvalItem，也不回写 testset；
+  - S8 及后续结果将依赖这份 map 作为 gold provenance；
+  - EvalItemResult / downstream evidence 会引用 GoldChunkMap identity；
+  - 因而 canonical gold artifact 必须可由 fresh clone 直接恢复；
+  - Git tracking 避免要求每个新环境先重跑 S6；
+  - 不允许长期处于 untracked + not ignored 状态。
+  - 成本说明（不是 provenance 理由）：map 2026 bytes + report 17897 bytes。
+- 事实：data commit = `717650526879fac689328b7e80747edab5bd670c`（`data: freeze canonical S6 GoldChunkMap`），
+  staged 恰为上述 2 个文件（均为 `A`），`git diff --cached --check` clean，已 push，fetch 后 `origin/ship-rag == HEAD`。
+- 事实（`MEASURED`，Git-tree recovery）：`git archive 7176505 | tar -x` 导出到全新临时目录；
+  导出的 map / report 的 sha256 / bytes / lines 与上方 identity 逐项相等；
+  在导出树中 import 导出树自身的 `core.contracts` 与 `ingest.builder_identity`，解析 GoldChunkMap，
+  `validate_gold_chunk_map(..., builder=ingest.builder_identity)` PASS（validation scope 见下一条）。
+- **决策：`GOLD_CHUNK_MAP_DURABILITY = DURABLE_IN_GIT`。**
+- 性质：map / report 是 derived、reproducible、Git-frozen canonical artifact；不属于 EvalItem；不修改 testset
+  （`eval/testset_v5_3.jsonl` 在 formal run 前后与本轮前后 sha256 均为 `05614407…`）。
+- 关闭已登记 followup：2026-09-28 manual alignment 条目中的 `GOLD_CHUNK_MAP_GIT_TRACKING = PENDING_DECISION`
+  由本条决定关闭。
+
+### [L2] committed-tree validation scope
+
+- **GIT_TREE_ARTIFACT_VALIDATION**（输入只来自导出的 Git tree）：map / report 字节可恢复；schema（字段集合与顺序）正确；
+  serialization（字节 == `serialize_gold_chunk_map()`）正确；filename 正确；`contracts_version` 与导出树 `CONTRACTS_VERSION` 一致；
+  builder identity 三项与导出树 `ingest.builder_identity` 导出一致；`testset_version` / `testset_sha256` 与导出树中的评测集一致；
+  mapping 键 == 导出评测集 answer qids（31）、无 refuse qid；report 表头、行序、级别（全部 L1/L2）与 mapping 自洽。
+- **EXTERNAL_CANONICAL_CORPUS_VALIDATION**：`corpus/chunks.jsonl` 被 gitignore，不在 git archive 中。
+  因此仅靠 committed tree **不能**重新证明"mapping 里的每个 chunk id 确实存在于 canonical corpus"
+  及 `corpus_chunks_sha256` 与语料字节相符。本轮这一层以当前磁盘上的 canonical corpus 作为明确标注的
+  read-only external input（重算 sha256 = `c8978777…` 后）完成，PASS。
+- **边界：不得把 Git-tree recovery 描述成"完整 S6 acceptance 纯 Git 可重放"。**
+  这一层依赖 canonical corpus external input；而 corpus 重建本身还依赖不进 Git 的 `raw/` 源 PDF。
+  这不是 failure，是 validation scope boundary。
+
+### [L2] Resolver corpus TOCTOU
+
+- **`RESOLVER_CORPUS_TOCTOU = FOLLOWUP`（保持不变）。**
+- 事实（`MEASURED`）：`corpus/chunks.jsonl` 的 sha256 / bytes / lines 在 Run A 前、Run A 后、Run B 后均为
+  `c8978777…` / 4678209 / 3409 → `CORPUS_IDENTITY_DRIFT_DURING_RUN = NO`。
+- 边界：这只证明本次运行没有发生 drift，不代表 resolver 本身已解决 TOCTOU
+  （`CODE_FACT`：resolver 仍只在开始时计算一次 corpus sha，加载后无复核）。
+
+### [L2] Builder-provider identity
+
+- 事实：production resolver 传给 `validate_gold_chunk_map` 的 builder `is ingest.builder_identity`（对象同一性）。
+  该约束由 resolver tests 的对象同一性测试（T25 / T26）保护。
+- 事实（`MEASURED`，formal run 前）：`tests.test_resolve_gold_chunks` / `tests.test_contracts_gold_chunk_map` /
+  `tests.test_builder_identity` 共 99 个测试 OK；另在真实 canonical 数据上把 committed 脚本作为 `__main__` 运行并截获
+  validator 参数：捕获的 builder `is ingest.builder_identity`；值相等的伪 provider 能通过 validator 的值比较；
+  CLI 拒绝 `--builder`，`run()` 无 provider 参数。
+
+### [L3] Formal-run CLI note
+
+- 事实：Formal Run A / Run B 都使用完整 64-char corpus sha assertion（`--corpus-sha c89787778448…25f4eb`），
+  与旧手册 Phase C 的 A = 8-char prefix / B = 64-char 写法不同。
+- 参数只做 assertion，不进入 map / report 的 self-computed identity（`CODE_FACT`：map 写 resolver 自算的 sha，
+  文件名亦由自算 sha 生成）；Run A / B 输出逐字节一致。
+
+### [L1] Evidence rule：identity assertion 不得 self-derive
+
+- 事实（本轮发现）：旧手册 Phase C 写法为
+  `CORPUS_SHA=$(shasum -a 256 corpus/chunks.jsonl …)` → `resolver --corpus-sha "$CORPUS_SHA"`。
+  assertion 的 expected 与被检查对象来自同一来源，无论文件是什么都会通过 ——
+  这是 **structurally non-falsifiable gate**。
+- **决策：identity assertion 的 expected value 必须来自独立的已冻结来源，
+  不能在同一步从被检查对象重新计算后再传回。**
+- 落地：执行手册 S6.3 Phase C 已改为区分 `EXPECTED_CORPUS_SHA256`（冻结 canonical identity，
+  来源：2026-09-24 S5c 关闭条目 `CURRENT_CANONICAL`）与 `ACTUAL_CORPUS_SHA256`（现场计算，只用于与 EXPECTED 比较）；
+  `--corpus-sha` 传 EXPECTED。本条只修一个无约束力的操作门，不扩展为新的 contract。
+
+### [L3] 登记的 followup（本轮不处理）
+
+- `core/contracts.py` 的 `GoldChunkMap` docstring 写有"它不进 Git，可再生是前提"与
+  "再生方式（这是它可以不进 Git 的前提）"；2026-09-25 [M] 条目的 why_not_falsifiable 亦写"GoldChunkMap 不进 Git"。
+  本条 durability 决定之后，这些描述性措辞与现状不一致。本轮不修改 contracts；
+  是否及如何更新措辞，由人工在契约轮次裁决。
+- `.gitignore` 顶部注释"唯一例外：eval/testset_*.jsonl …"未随本决定更新（不在本轮修改范围内）。

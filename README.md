@@ -12,7 +12,7 @@
 | 文件 | 角色 |
 |---|---|
 | `DECISIONS.md` | append-only 的决策 / 证据历史 |
-| `core/contracts.py` | 可执行的语义 / 数据契约（当前 `CONTRACTS_VERSION = "0.2.0"`） |
+| `core/contracts.py` | 可执行的语义 / 数据契约（当前 `CONTRACTS_VERSION = "0.3.1"`） |
 | `船载离线文档问答系统_实施方案_v0.13.md` | 设计 / rationale |
 | `执行手册_v4.md` | 操作顺序（operational sequence） |
 | `README.md` | 仅导航 |
@@ -24,8 +24,8 @@
 
 - S5c：**CLOSED**；canonical corpus 已冻结（见下）
 - S4a.9c-final measurement：已完成
-- S6（GoldChunkMap）：**未完成** —— resolver 已与 contracts v0.3.1 对齐并提交；formal S6 生成 / 验收尚未运行（流程见执行手册 S6）
-- S8：未开始
+- S6（GoldChunkMap）：**CLOSED** —— formal S6 验收 PASS；canonical GoldChunkMap + report 已冻结入 Git（见下文与 DECISIONS 2026-09-28）
+- S8：**READY / NOT STARTED**
 
 canonical corpus（`corpus/chunks.jsonl`，不进 Git，按下文重建后用这两个值核验）:
 
@@ -44,6 +44,7 @@ canonical corpus（`corpus/chunks.jsonl`，不进 Git，按下文重建后用这
 | `serve/` | 船端：查询服务 + 前端 | ✅ |
 | `eval/testset_*.jsonl` | 评测集。人工产物、不可再生 | ✅ |
 | `eval/results.csv` | 实验结果，**只追加，永不删行** | ✅ |
+| `eval/gold_chunk_map/` | canonical GoldChunkMap + report.csv（派生、可再生，冻结入库） | ✅ |
 | `experiments/` | 预注册模板、实验配置、模型台账 | ✅ |
 | `scripts/` | 一次性工具脚本 | ✅ |
 | `raw/` | 原始 PDF。只读，必须另行备份 | ❌ |
@@ -51,8 +52,9 @@ canonical corpus（`corpus/chunks.jsonl`，不进 Git，按下文重建后用这
 | `index/` | 向量库 + BM25 索引，可重新生成 | ❌ |
 | `models/` | LoRA adapter、GGUF 转换产物 | ❌ |
 
-进 Git 的判断标准：**能一条命令重新生成的 → 不进 Git，但生成脚本必须进。**
-唯一例外是 `eval/testset_*.jsonl`——它是人的判断，不可再生。
+进 Git 的默认判断标准：**能一条命令重新生成的 → 不进 Git，但生成脚本必须进。**
+例外：`eval/testset_*.jsonl`——它是人的判断，不可再生；以及经 DECISIONS 单独决定入库的可再生产物
+（例如 canonical GoldChunkMap，见 DECISIONS 2026-09-28 Formal S6 closure）。
 
 ## 语料重建
 
@@ -73,9 +75,15 @@ python3 ingest/build_corpus.py "raw/KAIVA - Manuals" corpus --cache-dir ocr_cach
 - `mapping` 只包含 `expected=="answer"` 的题。
 - 逐 citation 的 match level 的权威记录是 `.report.csv`；`GoldChunkMap` 不含 match levels。
 
-**S6 未完成，GoldChunkMap 尚未正式生成。**
-`scripts/resolve_gold_chunks.py` 已按 contracts v0.3.1 实现（只读评测集，输出独立的 map + report）；
-formal S6 generation / acceptance 尚未运行。
+**S6 = CLOSED。** canonical GoldChunkMap（tracked in Git；derived / reproducible，
+由 `scripts/resolve_gold_chunks.py` 从 canonical corpus + testset 逐字节再生）:
+
+    map     eval/gold_chunk_map/map__ts-v5.3__corpus-c8978777__builder-kaiva_phase_b_builder_v1.json
+            sha256 = 8cf9f3be1b1bc296c196d1b5598c1351d456f83b1a05a6043c7b643f0fedeacc
+    report  eval/gold_chunk_map/map__ts-v5.3__corpus-c8978777__builder-kaiva_phase_b_builder_v1.report.csv
+            sha256 = f48018cbe88de3d379fb65c17e75e6b8a87eebdc8dd19bdd539356bfff5a2572
+
+data commit `7176505`；identity 字段、验收结果与 validation scope 见 DECISIONS 2026-09-28 Formal S6 closure。
 
 ## 纪律
 
