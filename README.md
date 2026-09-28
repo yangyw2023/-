@@ -24,7 +24,7 @@
 
 - S5c：**CLOSED**；canonical corpus 已冻结（见下）
 - S4a.9c-final measurement：已完成
-- S6（GoldChunkMap）：**未完成**，当前阻塞于 resolver 与契约对齐 / semantic closure
+- S6（GoldChunkMap）：**未完成** —— resolver 已与 contracts v0.3.1 对齐并提交；formal S6 生成 / 验收尚未运行（流程见执行手册 S6）
 - S8：未开始
 
 canonical corpus（`corpus/chunks.jsonl`，不进 Git，按下文重建后用这两个值核验）:
@@ -73,10 +73,9 @@ python3 ingest/build_corpus.py "raw/KAIVA - Manuals" corpus --cache-dir ocr_cach
 - `mapping` 只包含 `expected=="answer"` 的题。
 - 逐 citation 的 match level 的权威记录是 `.report.csv`；`GoldChunkMap` 不含 match levels。
 
-**S6 未完成，GoldChunkMap 尚未生成。**
-`scripts/resolve_gold_chunks.py` currently requires alignment with contracts v0.2.0
-before formal S6 GoldChunkMap generation —— 现有脚本仍按旧方式把 `gold_chunk_ids`
-回填进评测集（`--out-testset`），不是上述架构。
+**S6 未完成，GoldChunkMap 尚未正式生成。**
+`scripts/resolve_gold_chunks.py` 已按 contracts v0.3.1 实现（只读评测集，输出独立的 map + report）；
+formal S6 generation / acceptance 尚未运行。
 
 ## 纪律
 

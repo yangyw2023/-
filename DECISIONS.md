@@ -2965,3 +2965,63 @@ testset `05614407…` / 39；accepted OCR manifest `c0e5b037…`。
 - `MEASURED`：canonical corpus、page_quality、accepted OCR artifacts（140）与 index、accepted manifest、9c-final 产物
   均不记录 contracts_version，也不消费被改变的 GoldChunkMap identity / validator 语义 → **均不失效**；
   GoldChunkMap / IndexManifest / EvalItemResult 均尚不存在。改动后真实 build() 仍逐字节复现 `c8978777…` / `69842896…`。
+
+## 2026-09-28 · S6 manual alignment：formal S6 就绪、builder provider 同一性、旧 80% 门撤销
+
+作用域：contracts `d30ed34`（v0.3.1）；resolver `8719761`；canonical corpus `c8978777…` / 3409；testset `05614407…` / 39。
+本条只记录文档对齐与既有实现证据，不改契约、不改代码。
+
+### [L2] BUILDER_PROVIDER_IDENTITY_ASSERTION = PASS
+
+- owner_experiment: S6 resolver（`tests/test_resolve_gold_chunks.py` T25 / T26 守护）。
+- 事实（`CODE_FACT`）：v0.3.1 用依赖注入让调用方把 `CorpusBuilderIdentity` 提供者传给 `validate_gold_chunk_map`；
+  validator 只做**值比较**。
+- 事实（`MEASURED`，T26）：一个与 `ingest.builder_identity` 值完全相同的伪 provider **能通过** validator。
+- 因此 resolver 生产路径必须 `import ingest.builder_identity as builder_identity`，并把**同一个模块对象**传给 validator；
+  `run()` 没有任何注入 provider 的参数。
+- 事实（`MEASURED`，T25）：测试捕获生产路径实际传入的 builder，断言 `builder is ingest.builder_identity`
+  （对象同一性 `is`，不是 `==`、不是字段值相等）。变异检查：把生产路径改为传值相等的伪 provider → T25 / T26 失败。
+- 这是实现验收证据，不新增 GoldChunkMap 契约字段。
+- falsified_if: resolver 生产路径出现传入非 `ingest.builder_identity` 对象、而 T25 / T26 仍通过的实例。
+
+### [L1] 旧"L1+L2 ≥ 80%"验收门撤销：L1_L2_80_PERCENT_STATUS = REDUNDANT
+
+- 事实（`CONTRACT_FACT`）：v0.3.1 的接受条件是 fail-closed —— 每道 answer 题的**每一条** citation 都必须是 L1/L2，
+  否则 `validate_gold_chunk_map` 抛异常、resolver 只写 report、退出码 3。
+- 推导（`DERIVED`，输入仅为上一条契约事实）：任何被接受的映射，其 L1+L2 占比必为 100%，"≥ 80%" 恒成立，
+  作为接受门不提供额外约束 → **REDUNDANT**。旧门配套的"低于 80% 才处理"的写法还暗示 80–99% 可接受，
+  与 fail-closed 矛盾。另外，旧门的 L2 是"邻页全片段命中"，v0.3.0 起已重定义为"同页唯一多块最小 cover"，
+  80% 这个数本身也是按旧语义设的。
+- 本结论不依赖当前 38/38 全部解析的测量结果。
+- **决策：执行手册 S6 删除该门，由"全部 answer citation 为 L1/L2"取代；不改成 100%（那只是把契约条件抄一遍）。**
+  保留旧门背后仍然有效的纪律：未解析时不修数据、不放宽匹配、逐条对照原文人工复核。
+- falsified_if: 契约的接受条件从 fail-closed 放宽为比例门。
+
+### [L1] S6 ordering 收窄：formal S6 当前可以执行
+
+- 追加收窄（不回改历史）：本文件及旧版手册中"S6 等待 S5c / 现在生成的 GoldChunkMap 是 known-to-be-invalidated artifact"
+  的前提已不成立 —— S5c 已 CLOSED（2026-09-24 条目），canonical corpus 已冻结，contracts v0.3.1 与权威 builder 身份已提交，
+  resolver 已按 v0.3.1 实现并提交。**formal S6 当前可以执行。**
+- GoldChunkMap 依赖的是 canonical corpus 字节与构建身份（`corpus_chunks_sha256` / `corpus_builder_name` /
+  `construction_rules_sha256` / `chunker_config`）。
+- **保留：若未来改动任何会改变 chunk 构建的依赖（包括但不限于 `CHARS_PER_TOKEN_EST`、`CHUNK_TARGET_TOKENS`、
+  `CHUNK_MIN_CHARS`、construction rules）而导致 corpus sha 改变，GoldChunkMap 必须针对新 corpus 重新生成。
+  invalidation 按实际依赖，不按参数所属的讨论主题。**
+- evidence_type: `CONTRACT_FACT` + 本文件既有 `MEASURED` 条目（S5c 关闭；构建依赖精确反事实）。
+- falsified_if: 出现 formal S6 的前置条件未满足、但本条仍被当作可执行依据的情形。
+
+### [L3] 执行手册 S6 对齐记录
+
+- 手册 S6 状态改为 **READY FOR FORMAL RUN（formal S6 尚未执行）**；正式流程写为 Phase A（identity gate）→ B（只读 preflight）→
+  C（Run A / Run B 全新目录、逐字节比较）→ D（fail-closed 验收 + 独立校验）→ E（只提升通过 D 的字节）。
+  文档中的 Phase A–D 命令已逐字执行验证（C / D 的产物只写入临时目录，事后删除）；Phase E 只做语法检查。
+- 文件名一律来自 `GoldChunkMap.filename()`；删除手写的 `parser-kaiva_pdf_v1`（S6 验收项与 S8 命令两处）。
+- resolver 输出覆盖策略（已存在同名 map/report 即拒绝运行）记为 **implementation / operational policy**，不是 GoldChunkMap 契约语义。
+- README 只做最小事实修正（resolver 已对齐；formal S6 未运行）。
+
+### [L3] 登记的 followup（本轮不处理）
+
+- **`RESOLVER_CORPUS_TOCTOU = FOLLOWUP`**，owner：post-S6 hardening。事实（`CODE_FACT`）：resolver 只在开始时计算一次
+  corpus sha；testset 有运行前后比对，corpus 没有加载后的复核。
+- **`GOLD_CHUNK_MAP_GIT_TRACKING = PENDING_DECISION`**，owner：formal S6 Phase E。事实（`MEASURED`）：
+  `eval/gold_chunk_map/` 不在 `.gitignore` 中，提升后会显示为 untracked；契约允许 GoldChunkMap 不进 Git（可再生）。
