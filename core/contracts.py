@@ -90,7 +90,7 @@ from typing import Literal, Mapping, Protocol, Sequence
 
 # 索引包与运行时的一致性校验依据（见 IndexManifest）。
 # 任何影响 Chunk 结构或引用语义的改动都必须递增此版本号。
-CONTRACTS_VERSION = "0.3.0"
+CONTRACTS_VERSION = "0.3.1"
 
 
 # ==============================================================================
@@ -707,19 +707,37 @@ class GoldChunkMap:
       corpus_chunks_sha256 resolver 【自行计算】的 chunks.jsonl 字节 SHA-256（完整 64 位）。
                            CLI 的 --corpus-sha 只是期望值断言（8 位前缀或 64 位全长），
                            不匹配即硬失败；映射里只写计算值，从不写断言值。
-      corpus_builder_name  生成该冻结语料的【语料构建语义实现族】的名字。
-                           不是某个 class 的名字（当前 canonical 语料由
-                           ingest/build_corpus.py 经 Phase B 路径生成，不是 KaivaPdfParser.parse()）。
-                           权威来源 = 语料构建实现导出的 CORPUS_BUILDER_NAME（或等价的单一接口），
-                           resolver 只能 import，不得手写。
-                           ⚠️ 截至 v0.3.0 该权威导出【尚不存在】，是正式生成 GoldChunkMap 的前置。
-      chunker_config       语料构建【实际消费】的全部 chunk 构建参数的确定性序列化。
-                           权威来源 = 语料构建实现导出的 effective_chunker_config_identity()
-                           （或等价的单一接口）：由构建实现列出它自己消费的参数，
-                           而不是由契约列出"它应该消费"的参数。resolver 只能 import，
-                           不得手写字符串、复制参数列表或从无关常量推断。
-                           ⚠️ 当前的 chunker_config_identity() 只是【临时】的契约侧推导，
-                           见其 docstring；正式生成 GoldChunkMap 前必须由构建实现的权威导出取代或桥接。
+      ── construction identity 四层（v0.3.1 冻结；四者含义不同，不得互相替代）──
+      corpus_chunks_sha256       = 最终冻结语料的【字节】身份（见上）。语料相等性只由它决定。
+      corpus_builder_name        = canonical 构建的【语义实现族/版本】。
+                                 不是某个 class 的名字（当前 canonical 语料由
+                                 ingest/build_corpus.py 经 Phase B 路径生成，不是 KaivaPdfParser.parse()）。
+      construction_rules_sha256  = 权威 builder 导出的【静态构建语义指纹】（64 位小写十六进制）。
+                                 它【不是】语料哈希、Git commit、源 PDF 身份、OCR artifact 身份，
+                                 也不是运行时/工具链清单。
+      chunker_config             = 核心【数值型】分块构建参数的人类可读确定性身份
+                                 （键 = 常量名小写，字典序，`key=value`，";" 连接）。
+
+      权威来源（H3）: 三项构建身份只由 ingest/builder_identity.py 导出 ——
+        CORPUS_BUILDER_NAME / construction_rules_identity() / effective_chunker_config_identity()。
+      本文件【不】列举 builder 依赖、不持有这些值、也【不 import】builder
+      （本文件谁都不依赖；直接 import 会形成 core.contracts → ingest.builder_identity →
+      core.contracts 的循环）。validate_gold_chunk_map() 通过参数接收实现
+      CorpusBuilderIdentity 的权威提供者；resolver 必须传入 ingest.builder_identity 本身，
+      不得手写、复制或钉住任何当前值。
+
+      ── 不进入本类的运行时 provenance（H2）──
+      源 PDF 身份、accepted OCR manifest、--doc-lang 实参、Poppler/pdftotext 版本、
+      视觉诊断 CSV 身份 —— 都【不】写进 GoldChunkMap。
+      理由: 本类是"人工 citations → 冻结语料 chunks"的派生投影，不是第二份语料构建清单。
+        这些输入变化而语料字节不变 → 本映射不应仅因此失效；
+        导致语料字节改变 → corpus_chunks_sha256 已使旧映射失效。
+      前提: corpus_chunks_sha256 始终是可核验的字节锚 —— canonical 语料在场时可直接重算；
+        丢失时能由冻结代码 + 冻结的必要输入重建并核验。
+      ⚠️ REOPEN CONDITION: 若出现"语料字节可能已变、但 corpus_chunks_sha256 无法重算、
+        也无法由冻结输入重建核验"的情形，本边界必须重新打开；
+        届时不得再声称语料哈希足以承担唯一字节锚。
+
       contracts_version    = CONTRACTS_VERSION。解析语义一变，旧映射即不能作为当前 canonical 映射
                            （不表示它在自己的 identity 下历史无效），必须可追溯。
 
@@ -736,8 +754,9 @@ class GoldChunkMap:
     testset_version: str          # 如 "v5.3"，见 testset_version_from_path()
     testset_sha256: str
     corpus_chunks_sha256: str     # 完整 64 位，resolver 自算
-    corpus_builder_name: str      # 见上方 identity 字段说明
-    chunker_config: str           # 见上方 identity 字段说明（当前临时推导: chunker_config_identity()）
+    corpus_builder_name: str      # 见上方 construction identity 四层
+    construction_rules_sha256: str  # 见上方 construction identity 四层
+    chunker_config: str           # 见上方 construction identity 四层
     contracts_version: str        # = CONTRACTS_VERSION；解析语义一变，旧映射即不能作为当前
                                   # canonical 映射，必须可追溯是用哪版契约生成的
     mapping: dict[str, list[str]]           # question_id -> [chunk_id, ...]，见上方键约束
@@ -1051,33 +1070,22 @@ def testset_version_from_path(path: str) -> str:
     return f"v{m.group(1)}.{m.group(2)}"
 
 
-def chunker_config_identity() -> str:
-    """GoldChunkMap.chunker_config 的【临时】契约侧推导。
-
-    ⚠️ 状态: TEMPORARY_CONTRACT_DERIVATION_PENDING_BUILDER_EXPORT（v0.3.0）。
-       它能证明下列三个值来自契约常量，配合源码审计能证明它们当前确实被 chunker 消费；
-       但它【不能结构性证明】未来 chunker 没有新增第四个实际参与 chunk 构建的参数
-       （silent omission risk）。因此:
-         - 它【不是】让 resolver 复制参数列表的许可；
-         - 正式生成 GoldChunkMap 之前，必须由语料构建实现导出的
-           effective_chunker_config_identity()（或等价的单一权威接口）取代或桥接。
+class CorpusBuilderIdentity(Protocol):
+    """GoldChunkMap 三项构建身份的【权威提供者】的形状。本文件只定义形状，不持有任何值。
 
     契约:
-      - 只包含【实际参与】canonical chunk 构建的契约常量:
-          CHARS_PER_TOKEN_EST / CHUNK_MIN_CHARS / CHUNK_TARGET_TOKENS
-        （v0.3.0 审计: components/parsers 与 ingest 读取这三者；
-          CHUNK_OVERLAP_TOKENS 未被任何分块代码读取，故【不】进入 identity，
-          直到某个 chunker 真正开始消费它 —— 那时须走契约仪式补进来。）
-      - 键为常量名小写，按字典序排列，形如 `key=value`，以 ";" 连接:
-          "chars_per_token_est=4;chunk_min_chars=120;chunk_target_tokens=350"
-      - 值直接取本文件常量，任何调用方都不得手抄这个字符串。
+      - 唯一的合法提供者是 ingest/builder_identity.py 模块本身（模块对象即满足本形状）。
+        resolver 必须把该模块传给 validate_gold_chunk_map()，不得手写、复制或钉住当前值。
+      - 本文件【不 import】builder：本文件谁都不依赖，且直接 import 会形成
+        core.contracts → ingest.builder_identity → core.contracts 的循环
+        （实测: 部分初始化的 core.contracts 在 kaiva_pdf 导入期缺 CHUNK_TARGET_TOKENS）。
+      - 三项取值都在调用时读取，不缓存。
     """
-    params = {
-        "chars_per_token_est": CHARS_PER_TOKEN_EST,
-        "chunk_min_chars": CHUNK_MIN_CHARS,
-        "chunk_target_tokens": CHUNK_TARGET_TOKENS,
-    }
-    return ";".join(f"{key}={params[key]}" for key in sorted(params))
+    CORPUS_BUILDER_NAME: str
+
+    def effective_chunker_config_identity(self) -> str: ...
+
+    def construction_rules_identity(self) -> str: ...
 
 
 def validate_gold_chunk_map(
@@ -1085,6 +1093,9 @@ def validate_gold_chunk_map(
     items: Sequence[EvalItem],
     corpus_chunk_ids: Sequence[str],
     citation_resolutions: Mapping[tuple[str, int], tuple[str, Sequence[str]]],
+    *,
+    current_corpus_chunks_sha256: str,
+    builder: CorpusBuilderIdentity,
 ) -> None:
     """校验一份 GoldChunkMap 能否被接受为【当前】canonical GoldChunkMap。不满足抛 ContractViolation。
 
@@ -1099,10 +1110,16 @@ def validate_gold_chunk_map(
       - corpus_chunk_ids: 语料全部 chunk id，【按 chunks.jsonl 行序】。
       - citation_resolutions: (question_id, citation_index) → (match_level, formal_chunk_ids)，
         覆盖每一道 answer 题的每一条 citation；citation_index 为 0-based。
+      - current_corpus_chunks_sha256: 调用方对当前 corpus_chunk_ids 所在 chunks.jsonl
+        字节自行计算的完整 SHA-256。
+      - builder: 权威构建身份提供者，必须是 ingest.builder_identity 模块本身（见 CorpusBuilderIdentity）。
 
     本函数负责的是【契约边界】，不负责解析算法本身（片段匹配与最小 cover 的计算属于 resolver）:
-      - identity 字段格式: testset_version、两个 SHA-256（完整 64 位小写十六进制）、
-        corpus_builder_name（非空、文件名安全）、chunker_config == chunker_config_identity()、
+      - identity: testset_version 格式；testset_sha256 为完整 64 位小写十六进制；
+        corpus_chunks_sha256 == current_corpus_chunks_sha256；
+        corpus_builder_name == builder.CORPUS_BUILDER_NAME（且文件名安全）；
+        construction_rules_sha256 == builder.construction_rules_identity()（且为 64 位小写十六进制）；
+        chunker_config == builder.effective_chunker_config_identity()；
         contracts_version == CONTRACTS_VERSION
       - fail-closed: 每条 answer citation 的级别都必须在 FORMAL_MATCH_LEVELS；
         L1 恰 1 个 chunk，L2 至少 2 个，且无重复
@@ -1120,18 +1137,27 @@ def validate_gold_chunk_map(
 
     if not _TESTSET_VERSION_RE.match(gold_map.testset_version):
         raise ContractViolation(f"testset_version 格式非法: {gold_map.testset_version!r}")
-    for name in ("testset_sha256", "corpus_chunks_sha256"):
+    for name in ("testset_sha256", "corpus_chunks_sha256", "construction_rules_sha256"):
         if not _SHA256_HEX_RE.match(getattr(gold_map, name)):
             raise ContractViolation(f"{name} 必须是完整 64 位小写十六进制 SHA-256")
+    if not _SHA256_HEX_RE.match(current_corpus_chunks_sha256):
+        raise ContractViolation("current_corpus_chunks_sha256 必须是完整 64 位小写十六进制 SHA-256")
+    if gold_map.corpus_chunks_sha256 != current_corpus_chunks_sha256:
+        raise ContractViolation(
+            f"corpus_chunks_sha256 {gold_map.corpus_chunks_sha256!r} != 当前语料 {current_corpus_chunks_sha256!r}"
+        )
     if not _BUILDER_NAME_RE.match(gold_map.corpus_builder_name):
         raise ContractViolation(
             f"corpus_builder_name 为空或含文件名不安全字符: {gold_map.corpus_builder_name!r}"
         )
-    if gold_map.chunker_config != chunker_config_identity():
-        raise ContractViolation(
-            f"chunker_config {gold_map.chunker_config!r} != chunker_config_identity() "
-            f"{chunker_config_identity()!r}"
-        )
+    expected_identity = (
+        ("corpus_builder_name", builder.CORPUS_BUILDER_NAME),
+        ("construction_rules_sha256", builder.construction_rules_identity()),
+        ("chunker_config", builder.effective_chunker_config_identity()),
+    )
+    for name, expected in expected_identity:
+        if getattr(gold_map, name) != expected:
+            raise ContractViolation(f"{name} {getattr(gold_map, name)!r} != 权威 builder 导出 {expected!r}")
     if gold_map.contracts_version != CONTRACTS_VERSION:
         raise ContractViolation(
             f"contracts_version {gold_map.contracts_version!r} != {CONTRACTS_VERSION!r}"
@@ -1407,6 +1433,19 @@ class Generator(Protocol):
 # 边界的判据: 一个值如果【会被实验重新校准】，它属配置或预注册；
 #             一个值如果【组件之间必须对齐才能互操作】，它属本文件。
 
+
+# ==============================================================================
+# 0.3.1 相对 0.3.0 的冻结改动记录（S6 contract follow-up，DECISIONS 2026-09-28 同名条目）
+# ==============================================================================
+# 【F1】GoldChunkMap 新增 construction_rules_sha256；construction identity 定为四层:
+#    corpus_chunks_sha256 / corpus_builder_name / construction_rules_sha256 / chunker_config。
+# 【F2】删除 v0.3.0 的临时推导 chunker_config_identity()（它自带参数列表）。三项构建身份的
+#    唯一权威 = ingest/builder_identity.py；本文件只定义 CorpusBuilderIdentity 形状。
+# 【F3】validate_gold_chunk_map 新增必填关键字参数 current_corpus_chunks_sha256 与 builder，
+#    按权威 builder 导出与当前语料哈希做相等校验（依赖注入，避免 contracts ↔ builder 循环）。
+# 【F4】运行时 provenance（源 PDF / OCR manifest / doc_lang / Poppler / 视觉 CSV）不进 GoldChunkMap，
+#    附 REOPEN CONDITION（见 GoldChunkMap docstring）。
+# 未改动: EvalItem / 引文片段语义 / 最小 cover 语义 / MatchLevel / 全部数值常量。
 
 # ==============================================================================
 # 0.3.0 相对 0.2.0 的冻结改动记录（S6 contract clarification，DECISIONS 2026-09-25 同名条目）

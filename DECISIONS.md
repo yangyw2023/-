@@ -2872,3 +2872,96 @@
   testset v5.3、9c-final 产物都不记录 contracts_version，也不消费被改变的 GoldChunkMap / MatchLevel /
   identity 语义 → **均无 semantic invalidation**。区分"artifact 没记录版本号"与
   "artifact 语义依赖被改变的契约"：只有后者构成失效，本次为零。
+
+## 2026-09-28 · S6 contract follow-up：GoldChunkMap 绑定 authoritative builder identity
+
+作用域：contracts 0.3.0 → 0.3.1；canonical corpus `c8978777…` / 3409；page_quality `69842896…` / 1335；
+testset `05614407…` / 39；accepted OCR manifest `c0e5b037…`。
+
+### [L1] invalidation 由 executable dependency 决定，不由参数名称 / 所属讨论主题决定
+
+- evidence_type: `MEASURED`（真实 `ingest/build_corpus.build()` 在 scratch 中逐字节复现 canonical
+  chunks `c8978777…` 与 page_quality `69842896…` 后，逐项 monkeypatch 做精确反事实）+ `CODE_FACT`（AST 可达性普查）。
+- owner: 语料构建实现（`ingest/builder_identity.py`）。
+- 例：`CHARS_PER_TOKEN_EST` 是 token 估算参数，同时参与 chunk 构建（改为 3 → 4384 chunks；改为 5 → 2770）；
+  `CHUNK_OVERLAP_TOKENS` 存在于 contracts，但 canonical builder 不读取（改为 0 / 200 → corpus 与 page_quality 逐字节不变）；
+  `MAX_PROMPT_TOKENS` / `TOP_K_CONTEXT` / `CONTEXT_PACK_MARGIN` / `CITATION_HEADER_EST_TOKENS` /
+  `PROMPT_OVERHEAD_RESERVE_TOKENS` 改变 → 逐字节不变；
+  `_PARA_SPLIT_RE` / `PDFTOTEXT_ARGS` / `SECTION_MAX_CHARS` / `HEADER_SCAN_LINES` / `OCR_LABEL_LINE_MAX_CHARS` /
+  `LATIN_SCRIPT_LANGS` / `--doc-lang` 改变 → corpus 改变。
+- falsified_if: 出现某参数的 executable dependency 与反事实结论不一致（按名称/主题分类反而正确）的实例。
+
+### [L1] GoldChunkMap construction identity 四层
+
+- **决策（Arya H1）：GoldChunkMap 对构建身份的正式绑定为
+  `corpus_chunks_sha256`（最终语料字节）/ `corpus_builder_name`（构建语义实现族与版本）/
+  `construction_rules_sha256`（权威 builder 导出的静态构建语义指纹）/ `chunker_config`（数值型分块参数的人类可读身份）。
+  四者不得互相替代。** 本次新增字段 `construction_rules_sha256`，CONTRACTS_VERSION 0.3.0 → 0.3.1。
+- evidence_type: `MEASURED`（上一条反事实：26 条静态构建规则会改变 corpus，却不在 v0.3.0 任何 identity 字段中 → B2）。
+- owner: 契约层（字段语义）/ 语料构建实现（取值）。
+- falsified_if: 出现四层中某一层与另一层始终同变、无独立信息的证据，或出现静态构建依赖改变而四层都不变的实例。
+
+### [L1] authoritative ownership：`ingest/builder_identity.py`；contracts / resolver 只消费
+
+- **决策（Arya H3）：`CORPUS_BUILDER_NAME` / `effective_chunker_config_identity()` / `construction_rules_identity()`
+  只由 `ingest/builder_identity.py` 导出；contracts / resolver / 下游不得复制登记表、重列参数、手写或钉住当前值。**
+- **v0.3.0 的临时推导 `core.contracts.chunker_config_identity()` 删除（不保留 facade）。**
+- **桥接方式 = 依赖注入**：`core/contracts.py` 只定义 `CorpusBuilderIdentity` 形状；
+  `validate_gold_chunk_map(..., current_corpus_chunks_sha256=..., builder=...)` 以参数接收权威提供者，
+  resolver 必须传入 `ingest.builder_identity` 模块本身。
+  理由（`MEASURED`）：contracts 顶层 import builder 形成循环
+  `core.contracts → ingest.builder_identity → core.contracts`（部分初始化的 contracts 在
+  `components/parsers/kaiva_pdf.py:48` 导入期缺 `CHUNK_TARGET_TOKENS` → AttributeError）；
+  函数内延迟 import 虽不崩溃，但让 contracts 依赖 ingest 与 components，违反"contracts 谁都不依赖"。
+  两条都有测试守护（contracts 不 import 任何第一方模块；Protocol 只有形状）。
+- evidence_type: `MEASURED` + `CODE_FACT`。
+- owner: 语料构建实现（值）；契约层（形状与校验规则）。
+- falsified_if: 出现不经权威模块也能正确产生三项身份的场景；或依赖注入被用来传入非权威提供者而未被 resolver 测试拦下。
+- 已知残余风险：contracts 在运行时无法验证传入的 `builder` 确为 `ingest.builder_identity`；由 resolver 侧测试负责。
+
+### [L2] runtime corpus provenance 不复制进 GoldChunkMap（H2）
+
+- owner_experiment: S6（GoldChunkMap 生成）/ 语料构建链。
+- **决策（Arya H2）：源 PDF 身份、accepted OCR manifest、`--doc-lang` 实参、Poppler/pdftotext 版本、
+  视觉诊断 CSV 身份不写进 GoldChunkMap。** GoldChunkMap 是"人工 citations → 冻结语料 chunks"的派生投影，
+  不是第二份语料构建清单。输入变化而语料字节不变 → 不应仅因此失效；语料字节改变 → `corpus_chunks_sha256` 已使其失效。
+- 前提：`corpus_chunks_sha256` 始终是可核验的字节锚（canonical 在场可重算；丢失可由冻结代码 + 冻结必要输入重建核验）。
+- **REOPEN CONDITION：若出现"语料字节可能已变、但 `corpus_chunks_sha256` 无法重算、也无法由冻结输入重建核验"，
+  本边界必须重新打开，届时不得再声称语料哈希足以承担唯一字节锚。**
+- 登记表边界：`CORPUS_LANG_DEFAULT` 保持 `RUNTIME_INPUT_DEFAULT`，不进入静态身份（不得以默认值冒充本次构建的实际值）。
+- evidence_type: `DERIVED`（输入：`corpus_chunks_sha256` 的字节锚定义 + 本节反事实）。
+
+### [L2] SILENT_OMISSION_DEFENSE = PARTIAL
+
+- owner_experiment: 语料构建实现的每次改动（由 `tests/test_builder_identity.py` 执行）。
+- 结构性防御：builder 自有登记表；AST 从 `build_corpus.main/build` 出发的可达常量普查；登记表与可达集合双向相等；
+  构建代码 AST 指纹 tripwire；合成漏登 / 变异测试（`MEASURED`：删除登记项、合成包新增依赖、改合并连接符均被拦下；
+  改 docstring / 注释不触发 tripwire）。
+- 已知盲区（不宣称覆盖）：函数体内字面量与逻辑；任意运行时输入；外部可执行文件/工具版本；
+  逻辑改动是否应递增 builder 版本的最终人工判断。
+- falsified_if: 出现构建可达常量改变 corpus 而上述测试全部通过的实例。
+
+### [L2] validator scope = CURRENT_CANONICAL_ONLY
+
+- owner_experiment: S6。
+- **决策（Arya H8）：`validate_gold_chunk_map` 只回答"能否作为当前 canonical 语料 / 当前构建语义下的 GoldChunkMap 被接受"。**
+  v0.3.1 起它对 `corpus_chunks_sha256`（与调用方自算的当前语料哈希）、`corpus_builder_name`、
+  `construction_rules_sha256`、`chunker_config`（与权威 builder 导出）做相等校验。
+  历史映射在自身 identity 下可能历史有效，在此被拒绝不表示它当年无效。
+- evidence_type: `CODE_FACT`（validator 实现）+ `MEASURED`（T3/T4/T5/T7/T9/T10；变异检查：去掉身份相等校验后 6 个测试失败）。
+- falsified_if: 出现需要在当前 builder 下接受历史语料映射的正式用例。
+
+### [L3] page_quality Git durability = FOLLOWUP；不阻塞 S6
+
+- 事实（`MEASURED`）：`ingest/page_quality.jsonl` 未被 Git 跟踪（也未被 ignore）；committed-tree 自测有 1 个 Phase B
+  集成测试因缺该文件而 skip。视觉诊断 CSV 同样未跟踪，因此 fresh clone 无法复现 page_quality 的 sha（chunks 不受影响）。
+- **决策（Arya H9）：单独 FOLLOWUP，不阻塞 formal S6** —— resolver 不读 page_quality，GoldChunkMap identity 不依赖它，
+  chunks 字节可独立核验。
+- owner: artifact durability（独立决定）。
+- reopen condition: resolver 或 GoldChunkMap identity 开始读取 page_quality。
+
+### [L3] 0.3.0 → 0.3.1 失效复核
+
+- `MEASURED`：canonical corpus、page_quality、accepted OCR artifacts（140）与 index、accepted manifest、9c-final 产物
+  均不记录 contracts_version，也不消费被改变的 GoldChunkMap identity / validator 语义 → **均不失效**；
+  GoldChunkMap / IndexManifest / EvalItemResult 均尚不存在。改动后真实 build() 仍逐字节复现 `c8978777…` / `69842896…`。

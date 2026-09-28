@@ -1,8 +1,9 @@
-"""GoldChunkMap / MatchLevel 契约测试（contracts v0.3.0，S6 contract clarification）。
+"""GoldChunkMap / MatchLevel 契约测试（contracts v0.3.1；v0.3.0 S6 clarification + v0.3.1 follow-up）。
 
 两部分:
   1. 契约边界: core.contracts 自己负责的东西 —— 版本、字段、文件名、identity helper、
-     validate_gold_chunk_map 的 fail-closed 与键/序约束、序列化确定性。
+     validate_gold_chunk_map 的 fail-closed 与键/序约束、序列化确定性，以及 v0.3.1 的
+     权威 builder 身份桥接（构建身份一律取自 ingest.builder_identity，测试不钉住当前值）。
   2. 规范性测试向量 GOLD_RESOLUTION_VECTORS（T1–T8 及补充）: 单条 citation 的解析语义。
      解析算法属于 resolver，不在 contracts 里。这里的 reference_resolve() 是 MatchLevel
      定义的【逐字转写】（暴力枚举子集），只用来证明向量与契约文字一致；
@@ -15,11 +16,14 @@
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import itertools
 import os
+import re
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -33,6 +37,8 @@ from core.contracts import (
     normalize_text,
     split_quote_fragments,
 )
+from components.parsers import kaiva_pdf
+from ingest import builder_identity
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -213,7 +219,7 @@ class TestOrderInvariance(unittest.TestCase):
 class TestContractConstants(unittest.TestCase):
 
     def test_version(self):
-        self.assertEqual(contracts.CONTRACTS_VERSION, "0.3.0")
+        self.assertEqual(contracts.CONTRACTS_VERSION, "0.3.1")
 
     def test_match_level_enum(self):
         self.assertEqual(contracts.MatchLevel.__args__, ("L1", "L2", "AMBIGUOUS", "L3", "L4", "FAIL"))
@@ -230,15 +236,73 @@ class TestContractConstants(unittest.TestCase):
         ))
 
 
+class TestContractsOwnsNoBuilderIdentity(unittest.TestCase):
+    """v0.3.1: 契约不持有、不复制、不 import builder 身份（DUPLICATE_IDENTITY_LOGIC = REMOVED）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(REPO_ROOT, "core", "contracts.py"), encoding="utf-8") as handle:
+            cls.tree = ast.parse(handle.read())
+
+    def test_temporary_chunker_helper_removed(self):
+        self.assertFalse(hasattr(contracts, "chunker_config_identity"))
+        module_functions = {n.name for n in self.tree.body if isinstance(n, ast.FunctionDef)}
+        self.assertFalse({n for n in module_functions if "chunker_config" in n or "construction_rules" in n})
+
+    def test_builder_identity_protocol_is_shape_only(self):
+        """CorpusBuilderIdentity 只声明形状: 方法体只能是 `...`，不得有任何取值逻辑。"""
+        cls = next(n for n in self.tree.body if isinstance(n, ast.ClassDef) and n.name == "CorpusBuilderIdentity")
+        for member in cls.body:
+            if isinstance(member, ast.FunctionDef):
+                body = [s for s in member.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant)
+                                                       and s.value.value is not Ellipsis)]
+                self.assertEqual(len(body), 1, member.name)
+                self.assertIsInstance(body[0], ast.Expr)
+                self.assertIs(body[0].value.value, Ellipsis)
+            else:
+                self.assertIsInstance(member, (ast.AnnAssign, ast.Expr), ast.dump(member)[:80])
+                if isinstance(member, ast.AnnAssign):
+                    self.assertIsNone(member.value)
+
+    def test_no_identity_key_literals_in_executable_code(self):
+        """参数键只允许出现在注释/docstring 中，不允许出现在可执行字符串字面量里。"""
+        docstrings = set()
+        for node in ast.walk(self.tree):
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef)) and ast.get_docstring(node) is not None:
+                docstrings.add(id(node.body[0].value))
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
+                for key in ("chars_per_token_est", "chunk_min_chars", "chunk_target_tokens"):
+                    self.assertNotIn(key, node.value)
+
+    def test_contracts_is_a_dependency_leaf(self):
+        """contracts 谁都不依赖（CLAUDE.md 依赖树）: 不 import 任何第一方模块，含函数内延迟 import。"""
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.Import):
+                roots = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                roots = [(node.module or "").split(".")[0]]
+            else:
+                continue
+            for root in roots:
+                self.assertNotIn(root, ("core", "components", "ingest", "eval", "scripts", "serve"))
+
+
 class TestGoldChunkMapFields(unittest.TestCase):
 
     def test_fields(self):
         names = [f.name for f in dataclasses.fields(GoldChunkMap)]
         self.assertEqual(names, ["testset_version", "testset_sha256", "corpus_chunks_sha256",
-                                 "corpus_builder_name", "chunker_config", "contracts_version",
-                                 "mapping"])
+                                 "corpus_builder_name", "construction_rules_sha256", "chunker_config",
+                                 "contracts_version", "mapping"])
         self.assertNotIn("built_at", names)
         self.assertNotIn("parser_name", names)
+
+    def test_t14_runtime_provenance_not_in_schema(self):
+        """H2: GoldChunkMap 不要求运行时语料构建 provenance。"""
+        joined = " ".join(f.name for f in dataclasses.fields(GoldChunkMap))
+        for token in ("doc_lang", "lang", "ocr", "manifest", "poppler", "pdftotext", "visual", "pdf", "tool"):
+            self.assertNotIn(token, joined)
 
 
 class TestIdentityHelpers(unittest.TestCase):
@@ -254,37 +318,12 @@ class TestIdentityHelpers(unittest.TestCase):
                 with self.assertRaises(ContractViolation):
                     contracts.testset_version_from_path(bad)
 
-    def test_chunker_config_identity(self):
-        value = contracts.chunker_config_identity()
-        keys = [pair.split("=", 1)[0] for pair in value.split(";")]
-        self.assertEqual(keys, sorted(keys))
-        self.assertEqual(set(keys), {"chars_per_token_est", "chunk_min_chars", "chunk_target_tokens"})
-        self.assertNotIn("overlap", value)
-        self.assertEqual(value, (f"chars_per_token_est={contracts.CHARS_PER_TOKEN_EST};"
-                                 f"chunk_min_chars={contracts.CHUNK_MIN_CHARS};"
-                                 f"chunk_target_tokens={contracts.CHUNK_TARGET_TOKENS}"))
-
-    def test_chunker_config_matches_chunker_source(self):
-        """identity 只能描述真正参与分块的参数：三个常量被分块代码读取，overlap 常量没有。"""
-        def read(rel: str) -> str:
-            with open(os.path.join(REPO_ROOT, rel), encoding="utf-8") as handle:
-                return handle.read()
-
-        chunker = read("components/parsers/kaiva_pdf.py")
-        for const in ("CHARS_PER_TOKEN_EST", "CHUNK_MIN_CHARS", "CHUNK_TARGET_TOKENS"):
-            self.assertIn(f"contracts.{const}", chunker, const)
-        for top in ("components", "ingest"):
-            for dirpath, _, filenames in os.walk(os.path.join(REPO_ROOT, top)):
-                for filename in filenames:
-                    if filename.endswith(".py"):
-                        path = os.path.join(dirpath, filename)
-                        with open(path, encoding="utf-8") as handle:
-                            self.assertNotIn("CHUNK_OVERLAP_TOKENS", handle.read(), path)
-
 
 # ---- validate_gold_chunk_map / 序列化 ---------------------------------------
+# 构建身份一律在调用时取自权威 builder（ingest.builder_identity），测试不钉住任何当前值。
 SHA_TESTSET = "a" * 64
 SHA_CORPUS = "c8978777" + "b" * 56
+OTHER_SHA = "d" * 64
 CORPUS_IDS = ("D:p1:0", "D:p1:1", "D:p2:0", "D:p2:1", "E:p5:0")
 
 
@@ -310,8 +349,9 @@ RESOLUTIONS = {
 def make_map(**overrides) -> GoldChunkMap:
     base = dict(
         testset_version="v5.3", testset_sha256=SHA_TESTSET, corpus_chunks_sha256=SHA_CORPUS,
-        corpus_builder_name="synthetic_builder_v1",
-        chunker_config=contracts.chunker_config_identity(),
+        corpus_builder_name=builder_identity.CORPUS_BUILDER_NAME,
+        construction_rules_sha256=builder_identity.construction_rules_identity(),
+        chunker_config=builder_identity.effective_chunker_config_identity(),
         contracts_version=contracts.CONTRACTS_VERSION,
         mapping={"Q1": ["D:p1:0", "D:p1:1", "D:p2:1"], "Q2": ["D:p2:0"]},
     )
@@ -319,15 +359,24 @@ def make_map(**overrides) -> GoldChunkMap:
     return GoldChunkMap(**base)
 
 
+def validate(gold_map, items=ITEMS, corpus=CORPUS_IDS, resolutions=None, corpus_sha=SHA_CORPUS):
+    contracts.validate_gold_chunk_map(gold_map, items, corpus, RESOLUTIONS if resolutions is None else resolutions,
+                                      current_corpus_chunks_sha256=corpus_sha, builder=builder_identity)
+
+
+def one_char_changed(value: str) -> str:
+    last = value[-1]
+    return value[:-1] + ("0" if last != "0" else "1")
+
+
 class TestValidateGoldChunkMap(unittest.TestCase):
 
-    def assertRejected(self, gold_map=None, items=ITEMS, corpus=CORPUS_IDS, resolutions=None):
+    def assertRejected(self, gold_map=None, **kwargs):
         with self.assertRaises(ContractViolation):
-            contracts.validate_gold_chunk_map(gold_map or make_map(), items, corpus,
-                                              RESOLUTIONS if resolutions is None else resolutions)
+            validate(gold_map or make_map(), **kwargs)
 
-    def test_valid_map_accepted(self):
-        contracts.validate_gold_chunk_map(make_map(), ITEMS, CORPUS_IDS, RESOLUTIONS)
+    def test_t2_authoritative_current_identity_map_accepted(self):
+        validate(make_map())
 
     def test_refuse_qid_rejected(self):
         self.assertRejected(make_map(mapping={"Q1": ["D:p1:0", "D:p1:1", "D:p2:1"],
@@ -381,9 +430,9 @@ class TestValidateGoldChunkMap(unittest.TestCase):
         self.assertRejected(make_map(mapping={"Q1": ["D:p1:0", "D:p1:1", "D:p2:1", "E:p5:0"],
                                               "Q2": ["D:p2:0"]}))
 
-    def test_identity_fields(self):
-        self.assertRejected(make_map(corpus_chunks_sha256=SHA_CORPUS[:8]))
-        self.assertRejected(make_map(corpus_chunks_sha256=SHA_CORPUS.upper()))
+    def test_identity_field_formats(self):
+        self.assertRejected(make_map(corpus_chunks_sha256=SHA_CORPUS[:8]), corpus_sha=SHA_CORPUS[:8])
+        self.assertRejected(make_map(corpus_chunks_sha256=SHA_CORPUS.upper()), corpus_sha=SHA_CORPUS.upper())
         self.assertRejected(make_map(testset_sha256="x" * 64))
         self.assertRejected(make_map(testset_version="5.3"))
         self.assertRejected(make_map(corpus_builder_name=""))
@@ -391,15 +440,53 @@ class TestValidateGoldChunkMap(unittest.TestCase):
         self.assertRejected(make_map(chunker_config="target350_overlap60_min120"))
         self.assertRejected(make_map(contracts_version="0.2.0"))
 
+    def test_t1_construction_rules_sha256_is_64_lowercase_hex(self):
+        self.assertRegex(builder_identity.construction_rules_identity(), r"^[0-9a-f]{64}$")
+        current = builder_identity.construction_rules_identity()
+        self.assertRejected(make_map(construction_rules_sha256=current.upper()))
+        self.assertRejected(make_map(construction_rules_sha256=current[:-1]))
+
+    def test_t3_builder_name_one_char_changed(self):
+        self.assertRejected(make_map(corpus_builder_name=one_char_changed(builder_identity.CORPUS_BUILDER_NAME)))
+
+    def test_t4_chunker_config_one_char_changed(self):
+        self.assertRejected(make_map(
+            chunker_config=one_char_changed(builder_identity.effective_chunker_config_identity())))
+
+    def test_t5_construction_rules_one_hex_changed(self):
+        self.assertRejected(make_map(
+            construction_rules_sha256=one_char_changed(builder_identity.construction_rules_identity())))
+
+    def test_t6_previous_contracts_version_rejected(self):
+        self.assertEqual(contracts.CONTRACTS_VERSION, "0.3.1")
+        self.assertRejected(make_map(contracts_version="0.3.0"))
+
+    def test_t7_corpus_sha_mismatch_rejected(self):
+        self.assertRejected(make_map(), corpus_sha=OTHER_SHA)
+        self.assertRejected(make_map(), corpus_sha="not-a-sha")
+
+    def test_t9_validator_follows_authoritative_chunker_config(self):
+        old = make_map()
+        with mock.patch.object(contracts, "CHARS_PER_TOKEN_EST", contracts.CHARS_PER_TOKEN_EST + 1):
+            self.assertNotEqual(builder_identity.effective_chunker_config_identity(), old.chunker_config)
+            self.assertRejected(old)
+            validate(make_map())
+
+    def test_t10_validator_rejects_old_map_when_construction_rules_change(self):
+        old = make_map()
+        with mock.patch.object(kaiva_pdf, "_PARA_SPLIT_RE", re.compile(r"\n")):
+            self.assertNotEqual(builder_identity.construction_rules_identity(), old.construction_rules_sha256)
+            self.assertRejected(old)
+            validate(make_map())
+
 
 class TestFilenameAndSerialization(unittest.TestCase):
 
     def test_filename(self):
         gold_map = make_map()
-        self.assertEqual(gold_map.filename(),
-                         "map__ts-v5.3__corpus-c8978777__builder-synthetic_builder_v1.json")
-        self.assertEqual(gold_map.report_filename(),
-                         "map__ts-v5.3__corpus-c8978777__builder-synthetic_builder_v1.report.csv")
+        stem = f"map__ts-v5.3__corpus-c8978777__builder-{builder_identity.CORPUS_BUILDER_NAME}"
+        self.assertEqual(gold_map.filename(), stem + ".json")
+        self.assertEqual(gold_map.report_filename(), stem + ".report.csv")
 
     def test_full_corpus_sha_is_serialized(self):
         self.assertIn(f'"corpus_chunks_sha256": "{SHA_CORPUS}"',
@@ -411,10 +498,10 @@ class TestFilenameAndSerialization(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertTrue(first.endswith(b"}\n"))
         self.assertNotIn(b"built_at", first)
+        self.assertIn(b'"construction_rules_sha256"', first)
 
     def test_non_ascii_kept(self):
-        text = contracts.serialize_gold_chunk_map(make_map(corpus_builder_name="builder_v1",
-                                                           mapping={"Q1": ["中:p1:0"]}))
+        text = contracts.serialize_gold_chunk_map(make_map(mapping={"Q1": ["中:p1:0"]}))
         self.assertIn("中:p1:0", text)
 
 
