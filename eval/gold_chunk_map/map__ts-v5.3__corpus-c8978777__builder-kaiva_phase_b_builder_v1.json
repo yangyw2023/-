@@ -1,0 +1,120 @@
+{
+  "testset_version": "v5.3",
+  "testset_sha256": "05614407a0e43a7f912ae17864892b0f069a22d1ad9d1ec2bfb7362150883e8b",
+  "corpus_chunks_sha256": "c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb",
+  "corpus_builder_name": "kaiva_phase_b_builder_v1",
+  "construction_rules_sha256": "e89e6f94ec80abdc458622a52587644dc72baaadeb6564606ddc273c2951c5a1",
+  "chunker_config": "chars_per_token_est=4;chunk_min_chars=120;chunk_target_tokens=350",
+  "contracts_version": "0.3.1",
+  "mapping": {
+    "FL01": [
+      "CMM:p32:2"
+    ],
+    "FL02": [
+      "CRM:p57:1"
+    ],
+    "FL03": [
+      "CRM:p56:1"
+    ],
+    "FL04": [
+      "FMM:p29:2"
+    ],
+    "FL05": [
+      "FMM:p32:0"
+    ],
+    "FL06": [
+      "QMM:p33:0",
+      "QMM:p33:1",
+      "QMM:p33:2",
+      "QMM:p34:0"
+    ],
+    "FL07": [
+      "QMM:p32:4",
+      "QMM:p32:5",
+      "QMM:p34:2"
+    ],
+    "FL08": [
+      "QMM:p57:1"
+    ],
+    "FL09": [
+      "NPM:p35:1"
+    ],
+    "FL10": [
+      "NPM:p27:0"
+    ],
+    "FL11": [
+      "TACM:p23:0"
+    ],
+    "FL12": [
+      "ERM:p14:0"
+    ],
+    "FL13": [
+      "EMM:p131:1"
+    ],
+    "FL14": [
+      "SMM:p15:3"
+    ],
+    "FL15": [
+      "CMM:p32:2"
+    ],
+    "CN01": [
+      "SMM:p35:0"
+    ],
+    "CN02": [
+      "SMM:p20:0"
+    ],
+    "CN03": [
+      "ERM:p14:0",
+      "QMM:p46:1"
+    ],
+    "CN04": [
+      "SMM:p38:0"
+    ],
+    "PR01": [
+      "ERM:p103:1",
+      "ERM:p103:2"
+    ],
+    "PR02": [
+      "SMM:p72:0"
+    ],
+    "PR03": [
+      "CMM:p74:1",
+      "CMM:p74:2"
+    ],
+    "PR04": [
+      "SMM:p35:1"
+    ],
+    "PR05": [
+      "EMM:p131:1"
+    ],
+    "PR06": [
+      "FMM:p38:1",
+      "FMM:p38:2"
+    ],
+    "CD01": [
+      "ERM:p105:0",
+      "ERM:p105:1",
+      "SMM:p73:0",
+      "SMM:p73:1",
+      "SMM:p74:0"
+    ],
+    "CD02": [
+      "EMM:p96:0",
+      "QMM:p73:0"
+    ],
+    "CD03": [
+      "FMM:p38:2",
+      "SMM:p35:2"
+    ],
+    "ML01": [
+      "CMM:p32:2"
+    ],
+    "ML02": [
+      "QMM:p33:0",
+      "QMM:p33:2"
+    ],
+    "ML03": [
+      "ERM:p14:0"
+    ]
+  }
+}
