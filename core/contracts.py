@@ -20,7 +20,12 @@
 
   # [L2] 一次性实测,非实验参数 —— 系统提示词是固定文本,token 数是量出来的不是跑出来的。
 
-本文件【绝对不交给 AI 生成或修改】。AI 可以按它实现组件，不能改它。
+本文件的【契约语义只能由人裁决】（Arya）。AI 不得自行决定是否改契约、改什么语义、
+选哪个契约选项，也不得根据实验结果顺手修改可执行契约。
+在专门的契约轮次中，若人已逐项明确给出 语义裁决 / 允许的 diff 范围 / 必须的不变量 /
+验收测试 / commit 边界，AI 可以【机械落地】这些已裁决内容；发现新的语义缺口必须停下，交回人工裁决。
+此类修改一律走上面的仪式：独立的 `contract:` commit（必须真实包含本文件），commit 前由人审核完整 diff。
+AI 可以按本文件实现组件。
 
 ================================================================================
 九条全链路语义约定 —— 每次让 AI 生成代码时必须整段贴入
@@ -66,16 +71,18 @@ printed_page 仅供船员核对，绝不用于定位。
 后果如果混在一起：M5 一做 chunk 大小消融，全部 gold_chunk_ids 作废且没有
 再生路径（再生要靠脚本，而脚本读的是同一个文件）；完整 SMM 到货重建语料同理。
 
-→ 见 GoldChunkMap。映射文件按 (评测集版本, 语料哈希, 解析器名) 命名，
+→ 见 GoldChunkMap。映射文件按 (评测集版本, 语料哈希, 语料构建器名) 命名，
   语料一变旧映射自动失效【且能看出来是哪一份失效了】。
 [L1] falsified_if: 语料与分块配置在项目全周期内都不再变化
 """
 
 from __future__ import annotations
 
+import json
+import os
 import re
-from dataclasses import dataclass, field, fields
-from typing import Literal, Protocol, Sequence
+from dataclasses import asdict, dataclass, field, fields
+from typing import Literal, Mapping, Protocol, Sequence
 
 # ==============================================================================
 # 版本
@@ -83,7 +90,7 @@ from typing import Literal, Protocol, Sequence
 
 # 索引包与运行时的一致性校验依据（见 IndexManifest）。
 # 任何影响 Chunk 结构或引用语义的改动都必须递增此版本号。
-CONTRACTS_VERSION = "0.2.0"
+CONTRACTS_VERSION = "0.3.0"
 
 
 # ==============================================================================
@@ -326,7 +333,8 @@ CONTEXT_PACK_BUDGET_TOKENS: int = int(
 # [L2] owner_experiment: 回填脚本首跑报告（按 L1+L2 命中率与误命中情况重定）
 #
 # 语义【不是】"丢弃短于此长度的片段"。见 split_quote_fragments 的契约。
-# 短片段仍参与 L1/L2 的"全片段命中"检验，只是【不能单独构成 L3 部分命中】。
+# 短片段仍参与 full evidence cover 判定（L1/L2/AMBIGUOUS），只是【不能单独构成 L3 部分命中】。
+# 本值【只】影响 L3 与 L4 的分界，不影响任何 formal gold 集合（见 MatchLevel）。
 #
 # 来源（2026-09-07 对 testset_v5_2 的 39 条 citation 实测）:
 #   95 个片段，长度 min 11 / p5 14 / 中位 38 / max 236
@@ -391,11 +399,54 @@ HitOrigin = Literal["bm25", "vector", "hybrid", "rerank"]
 Verdict = Literal["Correct", "Partial", "Incorrect"]
 
 # gold chunk 回填的匹配级别（实施方案 §24 第 4 步）。
-#   L1   全片段同块      L2   全片段邻页      L3   部分片段命中
-#   L4   页存在但无片段命中 → 【引文抄写有出入】的强信号
-#   FAIL (doc_id, pdf_page) 在语料中根本没有 chunk → 【页缺失】
+# 【v0.3.0 重新冻结】单条 citation 的解析语义。记号:
+#   P          = (citation.doc_id, citation.pdf_page)
+#   C(P)       = 语料中 doc_id、pdf_page 都等于 P 的全部 chunk
+#   fragments  = split_quote_fragments(citation.quote)      —— 全部片段，含短片段
+#   cand(f)    = { x ∈ C(P) | f 是 normalize_text(x.text) 的子串 }
+#   full evidence cover = 满足 ∀f: cand(f) ∩ S ≠ ∅ 的任意 S ⊆ C(P)
+#
+#   L1         最小基数 full cover【唯一】且 |cover| = 1   → 该 chunk 进 mapping
+#   L2         最小基数 full cover【唯一】且 |cover| ≥ 2   → cover 全部 chunk 进 mapping
+#   AMBIGUOUS  存在 full cover，但最小基数 full cover 不唯一 → 不进 mapping，needs_review
+#   L3         不存在 full cover，且至少一个满足 is_sole_match_eligible 的片段有 candidate
+#              → 只是【部分证据】，不是已解析的 citation；不进 mapping，needs_review
+#   L4         C(P) 非空，不存在 full cover，且没有可进 L3 的 eligible 命中
+#              （含: 零命中 / 只命中不具 sole-match eligibility 的短片段）
+#              → 【引文抄写有出入】的强信号；不进 mapping，needs_review
+#   FAIL       C(P) 为空 → 【页缺失】；不进 mapping，needs_review
+#
+# ⚠️ 页范围只有 citation 所在页（EXACT_CITATION_PAGE_ONLY），【不】搜 pdf_page±1，
+#    不做任何邻页 fallback。依据: chunk 按页构建、不跨页。
+#    若 chunker 开始产出跨页 chunk，本条必须重新走契约仪式。
+# ⚠️ 最小基数 full cover 不唯一时【必须】是 AMBIGUOUS。禁止按 chunk id、corpus 顺序、
+#    片段顺序任取一个，也禁止取并列 cover 的并集 —— 这些都加入了 citation 本身没有提供的偏好。
+#    实现可以用 corpus 顺序做确定性的枚举与序列化，但顺序【不得】参与消歧。
 # ⚠️ L4 与 FAIL 必须分开。合并会让"引文抄错"伪装成"页缺失"。
-MatchLevel = Literal["L1", "L2", "L3", "L4", "FAIL"]
+# ⚠️ section 【不是】匹配前置条件（表示差异如 "Chapter 15" vs "15" 不得制造 false negative），
+#    只用于审计与 mismatch 报告。
+MatchLevel = Literal["L1", "L2", "AMBIGUOUS", "L3", "L4", "FAIL"]
+
+# 能进入 GoldChunkMap.mapping 的级别。【唯一定义处】。其余级别一律 needs_review。
+FORMAL_MATCH_LEVELS: frozenset[str] = frozenset({"L1", "L2"})
+
+# report.csv 的 reason 列取值，与 MatchLevel 一一对应（见 MATCH_LEVEL_REASON）。
+GoldResolutionReason = Literal[
+    "RESOLVED_SINGLE_CHUNK",   # L1
+    "RESOLVED_MULTI_CHUNK",    # L2
+    "CARRIER_AMBIGUOUS",       # AMBIGUOUS
+    "FRAGMENTS_UNMATCHED",     # L3
+    "NO_ELIGIBLE_MATCH",       # L4
+    "PAGE_ABSENT",             # FAIL
+]
+MATCH_LEVEL_REASON: dict[str, str] = {
+    "L1": "RESOLVED_SINGLE_CHUNK",
+    "L2": "RESOLVED_MULTI_CHUNK",
+    "AMBIGUOUS": "CARRIER_AMBIGUOUS",
+    "L3": "FRAGMENTS_UNMATCHED",
+    "L4": "NO_ELIGIBLE_MATCH",
+    "FAIL": "PAGE_ABSENT",
+}
 
 # 失败归因标签（实施方案 §24.3）。
 # 每一个标签对应一种完全不同的修法 —— 有了它，M5 该调什么是数据说的不是猜的。
@@ -604,49 +655,142 @@ class EvalItem:
     rationale: str = ""
 
 
+# GoldChunkMap 文件名里语料哈希的前缀长度；也是 --corpus-sha 断言允许的短形式长度。
+CORPUS_SHA_PREFIX_CHARS: int = 8
+
+
 @dataclass(frozen=True)
 class GoldChunkMap:
-    """citations → chunk id 的映射。【派生产物，可再生，不进评测集】。
+    """citations → chunk id 的映射。【派生、可再生、确定性，不进评测集】。
 
-    契约:
-      - 由 scripts/resolve_gold_chunks.py 从 EvalItem.citations 机械生成
-      - 是测量检索层 Recall 的唯一依据
-      - mapping 只包含 expected=="answer" 的题。
-        拒答题不出现在 mapping 里 —— 它们没有 gold chunk，
-        混进 Recall 分母会让 Recall 失去意义。
-      - 文件名由 filename() 生成，含 (评测集版本, 语料哈希, 解析器名)。
-        语料或分块一变，旧映射自动失效【且能看出来是哪一份失效了】。
+    ── 语义单元（v0.3.0 冻结）──────────────────────────────────────────────
+      - 单条 citation 的 formal gold = 该 citation 的【唯一】最小基数 full evidence cover
+        （定义见 MatchLevel）。一条 citation 是一组人工给定的证据片段；formal gold 是
+        覆盖其【全部】片段所需的 chunk，不是"某一个 chunk 独自包含整条 quote"。
+      - 片段一律来自 split_quote_fragments()，【包括】短于
+        QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH 的片段。该常量只决定 L3/L4 的分界，
+        不得用于从完整证据中删除片段。
+      - 页范围只有 citation 所在页 (doc_id, pdf_page)，不搜邻页。
+      - 只有 FORMAL_MATCH_LEVELS（L1/L2）贡献 chunk。AMBIGUOUS / L3 / L4 / FAIL
+        【不贡献任何 chunk】—— "该页有 chunk 但不知道哪个承载证据"推不出
+        "这些 chunk 都是 gold"；部分证据也不是完整 gold。
+      - mapping[qid] = 该题全部 citation 的 formal cover 的并集，按 corpus 顺序排列、无重复。
 
+    ── mapping 的键 ──────────────────────────────────────────────────────────
+      - 键集合【恰好】等于评测集中 expected=="answer" 的题，按评测集顺序排列。
+      - expected=="refuse" 的题【不出现】。这是正常语义：拒答题没有 gold 出处
+        （validate_eval_item 已保证其 citations 为空），混进 Recall 分母会让 Recall 失去意义。
+      - 【fail-closed】可答题的每一条 citation 都必须解析为 L1 或 L2，映射才可被接受。
+        任何一条不是 → 不产出被接受的 GoldChunkMap（resolver 以非零码退出，
+        只写 report.csv 供人工复核）。以下三种写法【全部禁止】:
+          · mapping[qid] = []            —— 读起来是"这题没有 gold"
+          · 省略未解析的 answer qid      —— 与拒答题不可区分，且静默缩小 Recall 分母
+          · 把部分 citation 的并集当成完整 gold —— mapping 不带级别，下游无法察觉
+        可执行形式见 validate_gold_chunk_map()。
+
+    ── 不含什么 ──────────────────────────────────────────────────────────────
       ⚠️ 本类【不含 match_levels】。
-         实测: 39 题中有 6 道带多条 citation（CD01 3 条，FL06/FL07/CN03/CD02/CD03 各 2 条）。
-         一道题的多条 citation 完全可能是 L1/L2/L4 混合，压成一个 question-level
-         "最低级别"会丢掉【到底是哪一条需要人工复核】—— 而那正是唯一需要人看的信息。
-         匹配级别的权威记录是 `.report.csv`（每条 citation 一行）。
+         一道题的多条 citation 各自有级别，压成一个 question-level 级别会丢掉
+         【到底是哪一条需要人工复核】。匹配级别与逐片段证据的权威记录是 report.csv
+         （每条 citation 一行，列见 GOLD_CHUNK_MAP_REPORT_COLUMNS）。
          一个数据结构不要同时干"提供映射"和"承载审计"两件事。
+      ⚠️ 本类【不含时间戳】（v0.3.0 删除 built_at）。
+         它不进 Git，可再生是前提；EvalItemResult.gold_chunk_map_sha256 记录的是
+         serialize_gold_chunk_map() 输出的字节哈希。墙钟时间会让同输入两次生成的
+         哈希不同，已记录的结果就再也对不上再生的映射。运行时间只许打到 stdout / log。
+      ⚠️ Recall 在一题多 gold chunk 时按 ANY / ALL / coverage 哪种判命中，
+         【不由本类决定】—— 那是 metric 契约（owner: M1c / S8，尚未冻结）。
+
+    ── identity 字段 ─────────────────────────────────────────────────────────
+      testset_version      由 testset_version_from_path() 从评测集文件名导出，禁止手写。
+      testset_sha256       评测集文件字节的 SHA-256（64 位小写十六进制）。
+      corpus_chunks_sha256 resolver 【自行计算】的 chunks.jsonl 字节 SHA-256（完整 64 位）。
+                           CLI 的 --corpus-sha 只是期望值断言（8 位前缀或 64 位全长），
+                           不匹配即硬失败；映射里只写计算值，从不写断言值。
+      corpus_builder_name  生成该冻结语料的【语料构建语义实现族】的名字。
+                           不是某个 class 的名字（当前 canonical 语料由
+                           ingest/build_corpus.py 经 Phase B 路径生成，不是 KaivaPdfParser.parse()）。
+                           权威来源 = 语料构建实现导出的 CORPUS_BUILDER_NAME（或等价的单一接口），
+                           resolver 只能 import，不得手写。
+                           ⚠️ 截至 v0.3.0 该权威导出【尚不存在】，是正式生成 GoldChunkMap 的前置。
+      chunker_config       语料构建【实际消费】的全部 chunk 构建参数的确定性序列化。
+                           权威来源 = 语料构建实现导出的 effective_chunker_config_identity()
+                           （或等价的单一接口）：由构建实现列出它自己消费的参数，
+                           而不是由契约列出"它应该消费"的参数。resolver 只能 import，
+                           不得手写字符串、复制参数列表或从无关常量推断。
+                           ⚠️ 当前的 chunker_config_identity() 只是【临时】的契约侧推导，
+                           见其 docstring；正式生成 GoldChunkMap 前必须由构建实现的权威导出取代或桥接。
+      contracts_version    = CONTRACTS_VERSION。解析语义一变，旧映射即不能作为当前 canonical 映射
+                           （不表示它在自己的 identity 下历史无效），必须可追溯。
+
+    ── 确定性 ────────────────────────────────────────────────────────────────
+      同一输入两次生成，serialize_gold_chunk_map() 的输出必须逐字节相同。
+      candidate / formal chunk 的顺序一律用 corpus 顺序（chunks.jsonl 行序）；
+      该顺序只用于枚举与序列化，【不得】用于消歧（见 MatchLevel）。
 
     再生方式（这是它可以不进 Git 的前提）:
-        python3 scripts/resolve_gold_chunks.py --chunks ... --testset ...
+        python3 scripts/resolve_gold_chunks.py --chunks corpus/chunks.jsonl \\
+            --testset eval/testset_v5_3.jsonl --corpus-sha <8 位或 64 位> \\
+            --out-dir eval/gold_chunk_map/
     """
-    testset_version: str          # "v5.3"
+    testset_version: str          # 如 "v5.3"，见 testset_version_from_path()
     testset_sha256: str
-    corpus_chunks_sha256: str
-    parser_name: str              # "kaiva_pdf_v1"
-    chunker_config: str           # "target350_overlap60_min120"
-    contracts_version: str        # split_quote_fragments 的切片语义一变，旧映射即作废，
-                                  # 必须可追溯是用哪版契约生成的
-    built_at: str                 # ISO 8601
-    mapping: dict[str, list[str]]           # question_id -> [chunk_id, ...]
+    corpus_chunks_sha256: str     # 完整 64 位，resolver 自算
+    corpus_builder_name: str      # 见上方 identity 字段说明
+    chunker_config: str           # 见上方 identity 字段说明（当前临时推导: chunker_config_identity()）
+    contracts_version: str        # = CONTRACTS_VERSION；解析语义一变，旧映射即不能作为当前
+                                  # canonical 映射，必须可追溯是用哪版契约生成的
+    mapping: dict[str, list[str]]           # question_id -> [chunk_id, ...]，见上方键约束
 
     def filename(self) -> str:
         """映射文件的标准文件名（不含目录）。
 
-        形如: map__ts-v5.3__corpus-a1b2c3d4__parser-kaiva_pdf_v1.json
+        形如: map__ts-v5.3__corpus-c8978777__builder-<corpus_builder_name>.json
+        只由 identity 字段决定，与生成时间无关。
         """
         return (
             f"map__ts-{self.testset_version}"
-            f"__corpus-{self.corpus_chunks_sha256[:8]}"
-            f"__parser-{self.parser_name}.json"
+            f"__corpus-{self.corpus_chunks_sha256[:CORPUS_SHA_PREFIX_CHARS]}"
+            f"__builder-{self.corpus_builder_name}.json"
         )
+
+    def report_filename(self) -> str:
+        """配套 report.csv 的标准文件名：filename() 把 `.json` 换成 `.report.csv`。
+
+        映射未被接受（fail-closed）时 report 仍按此名写出 —— 它只依赖 identity 字段。
+        """
+        return self.filename()[: -len(".json")] + ".report.csv"
+
+
+# GoldChunkMap 的 report.csv 表头。【唯一定义处】，理由同 RESULTS_COLUMNS。
+# 每条 answer citation 一行；行序 = 评测集顺序，再按 citation_index。
+#   citation_index        该 citation 在 EvalItem.citations 中的位置，【0-based】
+#   pdf_page              【1-based】（约定第 4 条）
+#   section_exact_match   citation.section 是否等于该页某 chunk 的 section。只用于审计，不是匹配前置
+#   match_level           MatchLevel
+#   reason                = MATCH_LEVEL_REASON[match_level]
+#   formal_chunk_ids      只含 L1/L2 的 formal cover；其余级别为空
+#   candidate_chunk_ids   有片段命中、但不在 formal cover 中的 chunk
+#   needs_review          当且仅当 match_level 不在 FORMAL_MATCH_LEVELS
+#   fragment_matches_json 每个片段一项: {"index", "text", "length", "sole_match_eligible",
+#                         "candidate_chunk_ids"}，按片段序；
+#                         json.dumps(ensure_ascii=False, separators=(",", ":"))
+# 多个 chunk id 用 ";" 连接，一律按 corpus 顺序，禁止按 set / hash 迭代顺序输出。
+GOLD_CHUNK_MAP_REPORT_COLUMNS: tuple[str, ...] = (
+    "question_id",
+    "citation_index",
+    "doc_id",
+    "section",
+    "pdf_page",
+    "section_exact_match",
+    "fragment_count",
+    "match_level",
+    "reason",
+    "formal_chunk_ids",
+    "candidate_chunk_ids",
+    "needs_review",
+    "fragment_matches_json",
+)
 
 
 @dataclass(frozen=True)
@@ -852,7 +996,9 @@ def is_sole_match_eligible(fragment: str) -> bool:
       - 短于 QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH 的片段返回 False。
         理由: 'Not Required' / 'For Tankers' 这类通用短语在一页里可能出现多次，
         单凭它命中会产生假阳性。
-      - 返回 False 【不代表】该片段被忽略。它仍参与 L1/L2 的"全片段命中"检验。
+      - 返回 False 【不代表】该片段被忽略。它仍参与 full evidence cover 判定
+        （L1/L2/AMBIGUOUS，见 MatchLevel），且可以是 formal cover 的必要组成部分。
+      - 本函数只决定"不存在 full cover 时，算 L3 还是 L4"。
     """
     return len(fragment) >= QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH
 
@@ -877,6 +1023,181 @@ def validate_eval_item(item: EvalItem) -> None:
         )
     if item.language != item.language.lower():
         raise ContractViolation(f"{item.id}: language 必须是 ISO 639-1 小写")
+
+
+_TESTSET_FILENAME_RE = re.compile(r"^testset_v(0|[1-9][0-9]*)_(0|[1-9][0-9]*)\.jsonl$")
+_TESTSET_VERSION_RE = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+# corpus_builder_name 会进文件名，只允许文件名安全字符。
+_BUILDER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+def testset_version_from_path(path: str) -> str:
+    """从评测集文件名导出 GoldChunkMap.testset_version。
+
+    契约:
+      - 只看 basename，格式必须是 `testset_v<MAJOR>_<MINOR>.jsonl`，
+        MAJOR / MINOR 为不带前导零的十进制整数；返回 `v<MAJOR>.<MINOR>`。
+        例: "eval/testset_v5_3.jsonl" → "v5.3"
+      - 不符合格式 → 抛 ContractViolation。评测集版本是 identity 的一部分，
+        不允许猜、不允许手写。
+      - 不读文件内容；版本与内容的一致性由 testset_sha256 负责。
+    """
+    m = _TESTSET_FILENAME_RE.match(os.path.basename(path))
+    if not m:
+        raise ContractViolation(
+            f"评测集文件名不符合 testset_v<MAJOR>_<MINOR>.jsonl: {path!r}"
+        )
+    return f"v{m.group(1)}.{m.group(2)}"
+
+
+def chunker_config_identity() -> str:
+    """GoldChunkMap.chunker_config 的【临时】契约侧推导。
+
+    ⚠️ 状态: TEMPORARY_CONTRACT_DERIVATION_PENDING_BUILDER_EXPORT（v0.3.0）。
+       它能证明下列三个值来自契约常量，配合源码审计能证明它们当前确实被 chunker 消费；
+       但它【不能结构性证明】未来 chunker 没有新增第四个实际参与 chunk 构建的参数
+       （silent omission risk）。因此:
+         - 它【不是】让 resolver 复制参数列表的许可；
+         - 正式生成 GoldChunkMap 之前，必须由语料构建实现导出的
+           effective_chunker_config_identity()（或等价的单一权威接口）取代或桥接。
+
+    契约:
+      - 只包含【实际参与】canonical chunk 构建的契约常量:
+          CHARS_PER_TOKEN_EST / CHUNK_MIN_CHARS / CHUNK_TARGET_TOKENS
+        （v0.3.0 审计: components/parsers 与 ingest 读取这三者；
+          CHUNK_OVERLAP_TOKENS 未被任何分块代码读取，故【不】进入 identity，
+          直到某个 chunker 真正开始消费它 —— 那时须走契约仪式补进来。）
+      - 键为常量名小写，按字典序排列，形如 `key=value`，以 ";" 连接:
+          "chars_per_token_est=4;chunk_min_chars=120;chunk_target_tokens=350"
+      - 值直接取本文件常量，任何调用方都不得手抄这个字符串。
+    """
+    params = {
+        "chars_per_token_est": CHARS_PER_TOKEN_EST,
+        "chunk_min_chars": CHUNK_MIN_CHARS,
+        "chunk_target_tokens": CHUNK_TARGET_TOKENS,
+    }
+    return ";".join(f"{key}={params[key]}" for key in sorted(params))
+
+
+def validate_gold_chunk_map(
+    gold_map: GoldChunkMap,
+    items: Sequence[EvalItem],
+    corpus_chunk_ids: Sequence[str],
+    citation_resolutions: Mapping[tuple[str, int], tuple[str, Sequence[str]]],
+) -> None:
+    """校验一份 GoldChunkMap 能否被接受为【当前】canonical GoldChunkMap。不满足抛 ContractViolation。
+
+    作用域: CURRENT_CANONICAL_ONLY。
+      本函数判断的是"能否在当前 canonical 语料与当前可执行契约下被接受"，
+      【不是】通用的历史 artifact 校验器。一份记录旧 corpus sha、旧 builder/config identity
+      或旧 contracts_version 的历史映射，可能在它自己的 identity 下是有效的历史产物；
+      它在这里被拒绝只表示"不能作为当前 canonical 映射使用"，【不表示】它当年无效。
+
+    输入:
+      - items: 生成该映射所用的评测集，【按文件顺序】。本函数会对每条调用 validate_eval_item。
+      - corpus_chunk_ids: 语料全部 chunk id，【按 chunks.jsonl 行序】。
+      - citation_resolutions: (question_id, citation_index) → (match_level, formal_chunk_ids)，
+        覆盖每一道 answer 题的每一条 citation；citation_index 为 0-based。
+
+    本函数负责的是【契约边界】，不负责解析算法本身（片段匹配与最小 cover 的计算属于 resolver）:
+      - identity 字段格式: testset_version、两个 SHA-256（完整 64 位小写十六进制）、
+        corpus_builder_name（非空、文件名安全）、chunker_config == chunker_config_identity()、
+        contracts_version == CONTRACTS_VERSION
+      - fail-closed: 每条 answer citation 的级别都必须在 FORMAL_MATCH_LEVELS；
+        L1 恰 1 个 chunk，L2 至少 2 个，且无重复
+      - mapping 键【恰好】是 answer 题、按评测集顺序；拒答题不得出现
+      - mapping[qid] 非空、无重复、全部存在于语料、按 corpus 顺序，
+        且等于该题各 citation formal cover 的并集
+
+    返回 None 表示通过。不通过即抛异常，绝不返回布尔值让调用方去忽略。
+    """
+    for item in items:
+        validate_eval_item(item)
+    item_ids = [item.id for item in items]
+    if len(set(item_ids)) != len(item_ids):
+        raise ContractViolation("评测集中存在重复的 question id")
+
+    if not _TESTSET_VERSION_RE.match(gold_map.testset_version):
+        raise ContractViolation(f"testset_version 格式非法: {gold_map.testset_version!r}")
+    for name in ("testset_sha256", "corpus_chunks_sha256"):
+        if not _SHA256_HEX_RE.match(getattr(gold_map, name)):
+            raise ContractViolation(f"{name} 必须是完整 64 位小写十六进制 SHA-256")
+    if not _BUILDER_NAME_RE.match(gold_map.corpus_builder_name):
+        raise ContractViolation(
+            f"corpus_builder_name 为空或含文件名不安全字符: {gold_map.corpus_builder_name!r}"
+        )
+    if gold_map.chunker_config != chunker_config_identity():
+        raise ContractViolation(
+            f"chunker_config {gold_map.chunker_config!r} != chunker_config_identity() "
+            f"{chunker_config_identity()!r}"
+        )
+    if gold_map.contracts_version != CONTRACTS_VERSION:
+        raise ContractViolation(
+            f"contracts_version {gold_map.contracts_version!r} != {CONTRACTS_VERSION!r}"
+        )
+
+    position: dict[str, int] = {}
+    for index, chunk_id in enumerate(corpus_chunk_ids):
+        if chunk_id in position:
+            raise ContractViolation(f"语料中 chunk id 重复: {chunk_id!r}")
+        position[chunk_id] = index
+
+    answer_items = [item for item in items if item.expected == "answer"]
+    expected_keys = {(item.id, i) for item in answer_items for i in range(len(item.citations))}
+    if set(citation_resolutions) != expected_keys:
+        raise ContractViolation(
+            "citation_resolutions 必须恰好覆盖每道 answer 题的每一条 citation"
+        )
+
+    expected_mapping: dict[str, list[str]] = {}
+    for item in answer_items:
+        union: set[str] = set()
+        for i in range(len(item.citations)):
+            level, formal = citation_resolutions[(item.id, i)]
+            if level not in MATCH_LEVEL_REASON:
+                raise ContractViolation(f"{item.id}#{i}: 未知 match_level {level!r}")
+            if level not in FORMAL_MATCH_LEVELS:
+                raise ContractViolation(
+                    f"{item.id}#{i}: match_level={level}，未解析的 answer citation "
+                    f"不得产出被接受的 GoldChunkMap（fail-closed）"
+                )
+            if len(set(formal)) != len(formal):
+                raise ContractViolation(f"{item.id}#{i}: formal chunk id 重复")
+            if level == "L1" and len(formal) != 1:
+                raise ContractViolation(f"{item.id}#{i}: L1 必须恰好 1 个 formal chunk")
+            if level == "L2" and len(formal) < 2:
+                raise ContractViolation(f"{item.id}#{i}: L2 必须至少 2 个 formal chunk")
+            union.update(formal)
+        unknown = sorted(cid for cid in union if cid not in position)
+        if unknown:
+            raise ContractViolation(f"{item.id}: formal chunk 不在语料中: {unknown}")
+        expected_mapping[item.id] = sorted(union, key=position.__getitem__)
+
+    if list(gold_map.mapping) != list(expected_mapping):
+        raise ContractViolation(
+            "mapping 的键必须恰好是 answer 题、按评测集顺序；拒答题不得出现，未解析题不得省略"
+        )
+    for qid, chunk_ids in gold_map.mapping.items():
+        if list(chunk_ids) != expected_mapping[qid]:
+            raise ContractViolation(
+                f"{qid}: mapping 值必须是各 citation formal cover 的并集、无重复、按 corpus 顺序"
+            )
+
+
+def serialize_gold_chunk_map(gold_map: GoldChunkMap) -> str:
+    """GoldChunkMap 落盘文本的【唯一】生成方式。
+
+    契约:
+      - 字段顺序 = dataclass 字段顺序；mapping 保持插入顺序（不 sort_keys，
+        键序已由 validate_gold_chunk_map 约束为评测集顺序）
+      - ensure_ascii=False，indent=2，末尾恰一个换行
+      - 同一 GoldChunkMap 两次调用逐字节相同；EvalItemResult.gold_chunk_map_sha256
+        即对本函数输出（UTF-8 编码）取的 SHA-256
+      - 本函数【不做】接受性校验。调用方必须先通过 validate_gold_chunk_map()，
+        未被接受的映射不得序列化落盘。
+    """
+    return json.dumps(asdict(gold_map), ensure_ascii=False, indent=2) + "\n"
 
 
 def validate_answer(answer: Answer) -> None:
@@ -1086,6 +1407,22 @@ class Generator(Protocol):
 # 边界的判据: 一个值如果【会被实验重新校准】，它属配置或预注册；
 #             一个值如果【组件之间必须对齐才能互操作】，它属本文件。
 
+
+# ==============================================================================
+# 0.3.0 相对 0.2.0 的冻结改动记录（S6 contract clarification，DECISIONS 2026-09-25 同名条目）
+# ==============================================================================
+# 【G1】单条 citation 的 formal gold = 唯一最小基数 full evidence cover，只看 citation 所在页。
+#    MatchLevel 新增 AMBIGUOUS（最小 cover 不唯一）；L1/L2/L3/L4/FAIL 重新定义。
+#    旧定义"L2 全片段邻页"作废：chunk 不跨页，邻页命中不是 gold 证据。
+# 【G2】只有 L1/L2 贡献 mapping；AMBIGUOUS/L3/L4/FAIL 不贡献，且使映射 fail-closed。
+# 【G3】GoldChunkMap 删除 built_at（确定性、可再生）；parser_name → corpus_builder_name；
+#    filename() 中 "__parser-" → "__builder-"；新增 report_filename()。
+# 【G4】新增 FORMAL_MATCH_LEVELS / GoldResolutionReason / MATCH_LEVEL_REASON /
+#    GOLD_CHUNK_MAP_REPORT_COLUMNS / CORPUS_SHA_PREFIX_CHARS，以及
+#    testset_version_from_path / chunker_config_identity / validate_gold_chunk_map /
+#    serialize_gold_chunk_map。
+# 【G5】Recall 一题多 gold 的命中规则【未】在本版冻结（owner: M1c / S8）。
+# 未改动: Chunk / Citation / EvalItem / EvalItemResult / IndexManifest / 全部数值常量。
 
 # ==============================================================================
 # 本版（0.2.0）相对 0.1.0 的冻结改动记录

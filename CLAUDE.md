@@ -36,7 +36,7 @@
 
 | 事项 | 为什么 |
 |---|---|
-| `core/contracts.py` 的内容 | 唯一可信来源。改它要走变更仪式，只能由 Arya 定 |
+| `core/contracts.py` 的内容 | 唯一可信来源。契约语义只能由 Arya 裁决；AI 只能在专门的契约轮次里，按人逐项给出的裁决（语义 / diff 范围 / 不变量 / 验收测试 / commit 边界）机械落地，走变更仪式、独立 `contract:` commit、commit 前人审完整 diff；发现新的语义缺口必须停下 |
 | `eval/testset_*.jsonl` 的**内容语义** | 题目、标准答案、required_elements 是判断不是生成 |
 | `MIN_RELEVANCE` 等阈值的**取值** | 必须来自实测分数分布 |
 | 判分（Correct / Partial / Incorrect） | M2 走人工盲评协议，不交给模型 |

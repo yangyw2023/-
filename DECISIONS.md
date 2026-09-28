@@ -2644,3 +2644,231 @@
     **不是 GPU measurement。**
   - **C. `PER_CHANNEL_MEASUREMENT_REQUIRED = CONDITIONAL`** ——
     仅当下一轮仍认真考虑 Option B conditioned estimator 时才需要；**不得因此阻塞 S6。**
+
+## 2026-09-25 · S6 contract clarification：GoldChunkMap evidence-cover semantics and deterministic identity
+
+证据标记沿用本日期块起的纪律：`CONTRACT_FACT` / `CODE_FACT` / `MEASURED` / `DERIVED` / `NOT_VERIFIED`。
+作用域：corpus `c8978777…` / 3409 chunks；testset `eval/testset_v5_3.jsonl` `05614407…` / 39 题；
+`core/contracts.py` 修改前 sha256 = `7ed2399b3d34aaba0bd672655f5f104ff3b77756ebabc9ff534efa5ca7cecd9b`。
+
+### [L1] legacy backfill architecture 已被契约否决；resolver 顶层重写
+
+- 事实（`CODE_FACT`）：`scripts/resolve_gold_chunks.py:86/:228` 要求 `gold_chunk_ids`，`:326` 回写 question，
+  `:330-341` 输出 resolved testset，`:272/:276` 按整条 quote 字面匹配（不调用 `split_quote_fragments`）。
+  `MEASURED`：旧 `load_questions(eval/testset_v5_3.jsonl)` 抛 `missing required field(s): gold_chunk_ids`。
+- 契约（`CONTRACT_FACT`）：`gold_chunk_ids` 是派生产物、不进评测集（S3，见本文件 `:93-101`、`:160-165`）。
+- **决策：`LEGACY_BACKFILL_ARCHITECTURE = REJECTED_BY_CURRENT_CONTRACT`；
+  `LEGACY_RESOLVER_TOP_LEVEL_STATUS = TOP_LEVEL_REWRITE_REQUIRED`。
+  不在旧 backfill 架构上打补丁；`write_resolved_testset` / `fill_gold_chunk_ids` 删除；
+  `TESTSET_MUTATION_ALLOWED = NO`。** 本条是既有契约冲突的记录，不是新架构决策。
+
+### [L1] formal gold = 唯一最小基数 citation evidence cover，只看 citation 所在页
+
+- falsified_if: 出现人工核验过的 citation，其证据确实位于 citation 页上某组 chunk，
+  而"唯一最小基数 full cover"给出了错误集合或错误地判为 AMBIGUOUS；或 chunker 开始产出跨页 chunk。
+- 定义（已写入 `core/contracts.py` 的 `MatchLevel` / `GoldChunkMap`）：
+  `C(P)` = citation (doc_id, pdf_page) 页上的全部 chunk；片段 = `split_quote_fragments(quote)`（含短片段）；
+  `cand(f)` = C(P) 中 `normalize_text(text)` 含 f 的 chunk；full cover = 与每个 cand(f) 都相交的 S ⊆ C(P)。
+  - **L1** 最小基数 full cover 唯一且 |cover|=1 → 进 mapping
+  - **L2** 最小基数 full cover 唯一且 |cover|≥2 → 进 mapping
+  - **AMBIGUOUS** 有 full cover 但最小基数 cover 不唯一 → 不进 mapping，needs_review
+  - **L3** 无 full cover，且至少一个 `is_sole_match_eligible` 片段有 candidate → 部分证据，不进 mapping
+  - **L4** C(P) 非空、无 full cover、无可进 L3 的 eligible 命中（含只命中短片段）→ 不进 mapping
+  - **FAIL** C(P) 为空 → 不进 mapping
+- **决策：`GOLD_PAGE_SCOPE = EXACT_CITATION_PAGE_ONLY`，无邻页 fallback。**
+  依据：chunk 按页构建（`CODE_FACT` phase_b_ingest.py:259-272）；本页 94/94 片段命中，
+  而 ±1 会额外引入 PR01#0 fragment 4 → `ERM:p104:2`（`MEASURED`），那不是 gold 证据。
+- **决策：最小 cover 不唯一一律 AMBIGUOUS。禁止按 chunk id / corpus 顺序 / 片段顺序任取，
+  禁止取并列 cover 的并集。** corpus 顺序只用于确定性枚举与序列化，不参与消歧。
+- **更正（相对上一轮提案）：不采用 FORCED_COVER（单候选片段载体之并）作为一般契约。**
+  反例 A→{X,Y}、B→{Y,Z}：FORCED_COVER 给 AMBIGUOUS，但 {Y} 是唯一最小基数 full cover。
+  FORCED_COVER 与最小 cover 在当前 38 条上结果一致（`MEASURED`），那只是数据上的巧合，不是定义。
+- **决策：短片段仍参与 full evidence cover；`QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH`
+  只影响 L3/L4 分界，不得用于从完整证据中删除片段。**
+  依据：删短片段（MF-B）会删掉 FL07 的 `QMM:p32:4`（`(For TANKERS only)` / `should be Zero` 的唯一载体）
+  与 ML02 的 `QMM:p33:0`（`For Dry Vessels` 的唯一载体）（`MEASURED`）。
+- **决策：section 不是匹配前置条件，只用于审计**（`MEASURED`：3/38 条为表示差异，如 `Chapter 15` vs `15`）。
+
+### [L1] L3 / L4 / AMBIGUOUS / FAIL 不贡献 mapping；GoldChunkMap fail-closed（K3-C）
+
+- falsified_if: mapping 获得能显式标注"不完整 gold"的结构，或引入经契约定义的人工裁决通道。
+- 依据（`CONTRACT_FACT`）：mapping 不带级别（`GoldChunkMap` docstring），又是 Recall 的唯一依据。
+  "该页有 chunk 但不知道哪个承载证据"推不出"这些 chunk 都是 gold"；部分证据也不是完整 gold。
+- **决策：可答题的每一条 citation 都必须解析为 L1/L2，映射才被接受；否则只写 report.csv、
+  不产出被接受的 map JSON、非零退出。禁止 `mapping[qid] = []`、禁止省略未解析的 answer qid、
+  禁止把部分 citation 的并集当完整 gold。** 可执行形式：`validate_gold_chunk_map()`。
+- 拒答题 qid 不进 mapping 是正常语义，与"answer 题未解析"是两种状态；后者只能表现为映射不被接受。
+
+### [M] GoldChunkMap 确定性：删除 `built_at`
+
+- why_not_falsifiable: GoldChunkMap 不进 Git，逐字节可再生是它存在方式的前提；
+  `EvalItemResult.gold_chunk_map_sha256` 记录其字节哈希。这是方法要求，不是关于系统的经验主张。
+- **决策：删除 `GoldChunkMap.built_at`；运行时间只打到 stdout / log；落盘文本唯一由
+  `serialize_gold_chunk_map()` 生成。**
+
+### [L3] GoldChunkMap identity 字段
+
+- **`parser_name` → `corpus_builder_name`**，`filename()` 中 `__parser-` → `__builder-`，新增 `report_filename()`。
+  依据（`CODE_FACT`）：canonical 语料由 `ingest/build_corpus.py` → `phase_b_ingest._build_chunks`
+  → `kaiva_pdf.split_body_to_texts` + OCR 路径生成，不是 `KaivaPdfParser.parse()`。
+  语义：生成该冻结语料的语料构建语义实现族，不是某个 class 名。
+  **待办（resolver rewrite 前置）：权威 builder identity 常量当前不存在，须由语料构建实现提供；
+  本轮不创建，resolver 不得手写。**
+- **testset_version**：`testset_version_from_path()`，`testset_v<MAJOR>_<MINOR>.jsonl` → `v<MAJOR>.<MINOR>`，
+  不符合即 `ContractViolation`。
+- **chunker_config** = `chunker_config_identity()` =
+  `chars_per_token_est=4;chunk_min_chars=120;chunk_target_tokens=350`。
+  `CODE_FACT`：分块代码读取 `CHUNK_TARGET_TOKENS` / `CHARS_PER_TOKEN_EST` / `CHUNK_MIN_CHARS`；
+  `CHUNK_OVERLAP_TOKENS` 在 components/ 与 ingest/ 中零引用；
+  `MEASURED`：2159 对同页相邻 chunk 中仅 29 对共享 60 字符尾部，无系统性 overlap。
+  **不得再写 `target350_overlap60_min120`。**
+- **corpus sha**：resolver 自算完整 SHA-256；`--corpus-sha` 为必填断言（8 位前缀或 64 位全长），
+  不匹配硬失败；map 只写计算值。
+- **report.csv 列冻结**为 `GOLD_CHUNK_MAP_REPORT_COLUMNS`（13 列，含 `fragment_matches_json`）；
+  citation_index 0-based，pdf_page 1-based；chunk id 一律按 corpus 顺序。
+
+### [L2] Recall 一题多 gold 的命中规则：下游契约缺口
+
+- owner_experiment: M1c / S8
+- **决策：`RECALL_MULTI_GOLD_SEMANTICS = DOWNSTREAM_CONTRACT_GAP`，本轮不冻结 ANY / ALL / coverage。**
+  GoldChunkMap 只回答"哪些 chunk 构成 formal gold 证据"。不阻塞映射生成。
+
+### [L3] 当前语料测量（current-corpus measurement，不是契约定义）
+
+- `MEASURED`（corpus `c8978777…`、testset `05614407…`，按上述定义）：
+  38 条 citation / 94 片段，94/94 在 citation 页命中；MF-1 = 12 / MF-2 = 8 / MF-3 = 0；
+  **L1 = 30 / L2 = 8 / AMBIGUOUS = 0 / L3 = 0 / L4 = 0 / FAIL = 0；formal associations = 47**；
+  最小 cover 并列 = 0；多个完整覆盖 = 0。
+- 这些数字随语料变化，不参与定义。**契约不因当前 AMBIGUOUS/L3/L4/FAIL 为 0 而省略这些状态。**
+- **决策：真实数据未覆盖 AMBIGUOUS / L3 / L4 / FAIL，合成向量 `GOLD_RESOLUTION_VECTORS`
+  （`tests/test_contracts_gold_chunk_map.py`，T1–T9）是验收要求；下一轮 resolver 必须对同一组向量
+  给出相同的 (level, formal)。** 变异检查：把参考解析改成 FORCED_COVER 时 T3 失败，
+  改成丢弃短片段时 T8 失败（`MEASURED`）。
+
+### [L1] CONTRACTS_VERSION 0.2.0 → 0.3.0 与 invalidation 审计
+
+- 改动：MatchLevel 语义、GoldChunkMap schema（删除 built_at、parser_name → corpus_builder_name）、
+  gold 解析语义、确定性 identity。GoldChunkMap / IndexManifest / EvalItemResult 均尚未生成，迁移成本近零。
+- 未改动：Chunk / Citation / EvalItem / EvalItemResult / IndexManifest / 全部数值常量。
+- invalidation 判据：artifact 是否消费本次改变的 GoldChunkMap / MatchLevel / identity 语义，
+  **不是**"是否出现 0.2.0"。
+
+  | artifact | 记录 contracts 版本? | 消费改变的语义? | 被 0.3.0 invalidate? |
+  |---|---|---|---|
+  | corpus/chunks.jsonl | NO（13 个 Chunk 字段） | NO（Chunk 与分块常量未变） | NO |
+  | ingest/page_quality.jsonl | NO | NO | NO |
+  | ocr_cache/accepted（140 个 artifact + index.jsonl） | NO（`schema_version` 是 OCR artifact schema） | NO | NO |
+  | S4a.9c-final 产物 | NO（日志无版本、无 contracts.py sha） | NO（只读 Chunk 与数值常量） | **NOT_INVALIDATED_BY_0.3.0** |
+  | eval/testset_v5_3.jsonl | NO | NO（EvalItem 未变） | NO |
+  | eval/results.csv（仅表头） | NO | NO（表头仍等于 RESULTS_COLUMNS） | NO |
+  | Phase B Design Freeze | NO | NO（只把 GoldChunkMap 当未来产物） | NO |
+  | parser_audit `_citation_section_audit.log` | 记录 contracts.py 文件 sha `7ed2399b…` | NO | NO（只是 provenance 旧值） |
+
+- 待办：按 `core/contracts.py` 仪式，本改动单独一个以 `contract:` 开头的 commit（由人工执行）。
+  本改动由 Arya 裁决，Claude Code 按裁决落地；`core/contracts.py` 头部"不交给 AI 修改"与本轮授权之间的冲突已在会话中报告。
+
+## 2026-09-28 · S6 contract diff review closeout：契约治理收窄、invalidation 收窄、权威语料构建身份
+
+### [L1] HUMAN_CONTRACT_AUTHORITY_DECISION = SEMANTIC_AUTHORITY_HUMAN / MECHANICAL_APPLICATION_ALLOWED
+
+- falsified_if: 出现 AI 机械落地时混入了未经人工裁决的语义选择、且现有审核流程未能拦下的实例。
+- **决策（Arya 裁决）：原"`core/contracts.py` 绝对不交给 AI 生成或修改"收窄为：
+  契约语义只能由人裁决。AI 不得自行决定是否改契约、改什么语义、选哪个选项，
+  也不得根据实验结果顺手修改可执行契约。在专门的契约轮次中，若人已逐项给出
+  语义裁决 / 允许的 diff 范围 / 必须的不变量 / 验收测试 / commit 边界，AI 可以机械落地。**
+- 约束：独立 `contract:` commit，且必须真实包含 `core/contracts.py`；commit 前由人审核完整 diff；
+  不得混入未裁决的语义选择；发现新的语义缺口必须停下，交回人工裁决。
+- 这条纪律保护的是 **human semantic authority**，不是 human keystrokes。
+- 性质认定：上一条目（2026-09-25 S6 contract clarification）对应的 `core/contracts.py` diff 为
+  **AI_MECHANICAL_APPLICATION_OF_EXPLICIT_HUMAN_CONTRACT_DECISIONS**，不是自主的契约决策。
+- 同步修改的治理措辞（仅这两处）：`core/contracts.py` 文件头
+  "本文件【绝对不交给 AI 生成或修改】…"一行；`CLAUDE.md`"绝对不要碰的东西"表中 `core/contracts.py` 一行。
+
+### [L1] S6 invalidation 收窄：packing-only 与 chunk-construction 分开
+
+- 事实（`CODE_FACT`，canonical 构建路径 `ingest/build_corpus.py:145` → `phase_b_ingest.process_page`
+  → `_build_chunks`（`phase_b_ingest.py:259-264`）→ `kaiva_pdf.split_body_to_texts`（`:660-662`）→ `_split_page_body`）：
+
+  | 常量 | 定义处 | canonical chunker 消费? | 代码位置 | 可改变 chunk 边界? |
+  |---|---|---|---|---|
+  | `CHARS_PER_TOKEN_EST` | contracts.py | YES | `kaiva_pdf.py:469`（`_est_tokens` = len // 本值）→ `:494/:499/:516` 与目标比较 | YES |
+  | `CHUNK_TARGET_TOKENS` | contracts.py | YES | `kaiva_pdf.py:494/:499/:516` | YES |
+  | `CHUNK_MIN_CHARS` | contracts.py | YES | `kaiva_pdf.py:539/:543`（合并短块）；`phase_b_ingest.py:226/:234/:243`、`page_states.py:109/:149/:178`（页准入） | YES |
+  | `CHUNK_OVERLAP_TOKENS` | contracts.py | **NO** | components/ 与 ingest/ 零引用 | NO |
+
+- `MEASURED`（进程内 monkeypatch 契约常量，在 canonical 页文本上重跑 `split_body_to_texts`；未改任何文件）：
+  `CHARS_PER_TOKEN_EST` 取 3 / 5 → 1053 / 792 页（共 1250 页）的切分改变，chunk 数 4677 / 2722；
+  `CHUNK_TARGET_TOKENS` 取 300 / 400 → 925 / 623 页；`CHUNK_MIN_CHARS` 取 100 / 200 → 13 / 85 页；
+  `CHUNK_OVERLAP_TOKENS` 取 0 / 200 → 0 页。
+  效度边界：页正文由 canonical chunk 以 `"\n\n"` 重新拼接近似，当前常量下复现 1068/1250 页
+  （3277 vs 3409 chunk）。它证明"能改变边界"，不给出精确幅度。
+
+- **决策：**
+  - **PACKING_ONLY_CONTRACT_CHANGE**：只影响 prompt/context packing、运行时预算、渲染余量，
+    且经 `CODE_FACT` 确认不参与 canonical corpus 构建的参数（如 `MAX_PROMPT_TOKENS`、`CONTEXT_PACK_MARGIN`、
+    `PROMPT_OVERHEAD_RESERVE_TOKENS`、`CITATION_HEADER_EST_TOKENS`、`TOP_K_CONTEXT`）。
+    这类变化**不改变 corpus identity**，**不会仅因此 invalidate GoldChunkMap**。
+  - **CHUNK_CONSTRUCTION_CONTRACT_CHANGE**：任何经 `CODE_FACT` 确认真实参与 canonical chunk 构建的参数
+    （当前：`CHARS_PER_TOKEN_EST`、`CHUNK_TARGET_TOKENS`、`CHUNK_MIN_CHARS`）。任一值改变 →
+    重建 corpus → 新 corpus sha / 可能的新 chunk id → 旧 GoldChunkMap 过时 → 重新生成 GoldChunkMap。
+  - **`S6_CAN_PROCEED_BEFORE_NUMERIC_TOKEN_CONTRACT_CLOSURE = YES`，
+    ONLY because no chunk-construction parameter is being changed now。**
+- **收窄（append-only，不回改历史）**：本文件"S6 依赖与 invalidation 审计闭合"条目中的
+  `TOKEN_BUDGET_CHANGE_INVALIDATES_GOLD_CHUNK_MAP = NO` 只对 packing-only 参数成立。
+  它原附条件"corpus / chunk identity / text / doc / page 保持不变"，
+  而 `CHARS_PER_TOKEN_EST` 的改变本身就会违反这一条件。
+
+### [L1] CHARS_PER_TOKEN_EST 的双重角色与"依赖不看名字"纪律
+
+- **`CHARS_PER_TOKEN_EST_ROLE = TOKEN_ESTIMATOR_PARAMETER + CANONICAL_CHUNK_CONSTRUCTION_INPUT`**（依据见上表）。
+- **决策：invalidation 由实际依赖决定，不由参数名称、所在文件，或它此前被放在哪条讨论线上决定。**
+- 同类反例（只作为纪律示例，不扩展契约）：
+  `parser_name` 这个名字 ≠ 实际语料构建器身份；`CHUNK_OVERLAP_TOKENS` 存在于 contracts ≠ canonical chunker 实际消费；
+  `CHARS_PER_TOKEN_EST` 被放在 token-budget 讨论里 ≠ 它只是 packing 依赖。
+
+### [L1] CHUNKER_CONFIG_IDENTITY_STATUS = TEMPORARY_CONTRACT_DERIVATION_PENDING_BUILDER_EXPORT
+
+- 事实：当前 `chunker_config_identity()` 能证明所列三个值来自契约常量；配合源码审计能证明它们当前被 chunker 消费；
+  但**不能结构性证明**未来 chunker 没有新增第四个实际参与 chunk 构建的参数 → silent omission risk。
+- `CODE_FACT`（作为该风险的现存实例，不扩展契约）：canonical 构建路径上还消费着不在
+  `chunker_config_identity()` 里的构建参数，例如：`kaiva_pdf._PARA_SPLIT_RE`（`:108/:484`，段落切分规则）、
+  `kaiva_pdf.PDFTOTEXT_ARGS`（`:37/:247`，`-layout`）、`citation_gate.SECTION_MAX_CHARS`（`:55/:114`）、
+  `contracts.CORPUS_LANG_DEFAULT`（`build_corpus.py:234` → `phase_b_ingest.py:98` 页准入）。
+  这些参数哪些属于"effective chunker config"、哪些归 `corpus_builder_name` 覆盖，
+  由下一轮构建实现导出时逐项列出，交人工确认。
+- **职责冻结：**
+  - **Contract layer**：定义 `corpus_builder_name` 的语义；要求 effective chunker config 进入 provenance；
+    规定 `chunker_config` 的确定性序列化要求；要求 GoldChunkMap 绑定这些 identity。
+  - **Corpus-building implementation = authoritative provider**：导出 `CORPUS_BUILDER_NAME` 与
+    `effective_chunker_config_identity()`（或等价的单一权威接口），内容是**它实际消费的全部** corpus 构建参数，
+    而不是契约列出的"它应该消费"的参数。
+  - **Resolver**：只能 import / 消费上述权威导出；禁止手写 builder name、手写 chunker_config、
+    复制参数列表、从无关常量推断。
+- **`IMPLEMENTATION_PREREQUISITE_FOR_FORMAL_S6 = YES`**：权威 builder/config 导出留给下一轮
+  resolver rewrite implementation；本轮不改 components/parsers/*、ingest/*、scripts/resolve_gold_chunks.py。
+  当前 `chunker_config_identity()` 保留为 v0.3.0 契约侧临时推导（docstring 已标注 TEMPORARY、
+  不是 resolver 复制的许可、正式生成 GoldChunkMap 前必须被取代或桥接）。
+
+### [L1] CURRENT_VALIDATOR_SCOPE = CURRENT_CANONICAL_ONLY；HISTORICAL_IDENTITY_BLOCKER = NO
+
+- **决策：`validate_gold_chunk_map()` 只判断某份映射能否被接受为当前 canonical 语料、
+  当前可执行契约下的 GoldChunkMap；它不是通用的历史 artifact 校验器**（docstring 已写明）。
+  其中 `chunker_config == chunker_config_identity()` 与 `contracts_version == CONTRACTS_VERSION` 两项检查保留。
+- 历史映射（旧 corpus sha / 旧 builder/config identity / 旧 contracts_version）可能在它自己的 identity 下
+  historically valid，只是 not acceptable as CURRENT canonical GoldChunkMap。
+  **不得写成"历史 artifact 当年无效"。**
+- **`HISTORICAL_IDENTITY_BLOCKER = NO`。**
+
+### [L3] 本轮未重新打开的语义与复核
+
+- 未改变：formal gold = 唯一最小基数 full evidence cover；L1 / L2 / AMBIGUOUS / L3 / L4 / FAIL 定义；
+  `EXACT_CITATION_PAGE_ONLY`；短片段参与 full cover；K3-C fail-closed；删除 built_at；testset_version 规则；
+  report schema；Recall 多 gold 下游缺口。
+- `MEASURED`（current-corpus measurement，不是契约不变量）：L1 = 30 / L2 = 8 / AMBIGUOUS = 0 / L3 = 0 / L4 = 0 /
+  FAIL = 0；formal associations = 47。
+- `MEASURED`：`python3 -m unittest tests.test_contracts_gold_chunk_map tests.test_phase_b` → 91 OK；
+  T3 拦 FORCED_COVER 回退，T4/T4b 覆盖最小 cover 并列，T8 拦丢弃短片段（变异检查见上一条目）。
+- 0.2.0 → 0.3.0 失效复核：corpus `c8978777…`、page_quality、accepted OCR artifacts（140）与 index.jsonl、
+  testset v5.3、9c-final 产物都不记录 contracts_version，也不消费被改变的 GoldChunkMap / MatchLevel /
+  identity 语义 → **均无 semantic invalidation**。区分"artifact 没记录版本号"与
+  "artifact 语义依赖被改变的契约"：只有后者构成失效，本次为零。
