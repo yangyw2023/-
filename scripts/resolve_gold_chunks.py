@@ -326,6 +326,7 @@ def identity_map(testset_path: str, testset_sha: str, corpus_sha: str,
         chunker_config=builder_identity.effective_chunker_config_identity(),
         contracts_version=contracts.CONTRACTS_VERSION,
         mapping=mapping,
+        gold_chunk_map_semantics_version=contracts.GOLD_CHUNK_MAP_SEMANTICS_VERSION,
     )
 
 

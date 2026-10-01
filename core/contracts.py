@@ -78,19 +78,48 @@ printed_page 仅供船员核对，绝不用于定位。
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
+import numbers
 import os
 import re
 from dataclasses import asdict, dataclass, field, fields
-from typing import Literal, Mapping, Protocol, Sequence
+from fractions import Fraction
+from typing import Callable, Literal, Mapping, Protocol, Sequence
 
 # ==============================================================================
 # 版本
 # ==============================================================================
 
-# 索引包与运行时的一致性校验依据（见 IndexManifest）。
-# 任何影响 Chunk 结构或引用语义的改动都必须递增此版本号。
-CONTRACTS_VERSION = "0.3.1"
+# 【整个可执行契约模块（本文件）的版本】（人工裁决 CONTRACT_VERSION_DECISION = SPLIT，DECISIONS 2026-10-01
+# final protocol closure）。每个 `contract:` commit 都递增它（历史: 0.2.0 / 0.3.0 / 0.3.1 / 0.4.0 各对应一个
+# contract commit）；任何影响 Chunk 结构或引用语义的改动当然也在其中。
+# 用途: 索引包与运行时的一致性校验依据（见 IndexManifest；约定 9 岸船共用同一份本文件），以及 artifact 的 provenance。
+# ⚠️ 它【不】决定派生 artifact 是否失效 —— 失效由 artifact 实际依赖的语义版本决定。
+#    GoldChunkMap 的兼容判定用 GOLD_CHUNK_MAP_SEMANTICS_VERSION，不用本值；
+#    只改检索语义的版本递增不得使 GoldChunkMap 失效。
+CONTRACTS_VERSION = "0.4.0"
+
+# 【GoldChunkMap 语义版本】citation → chunk 投影的兼容判定依据（validate_gold_chunk_map）。
+# 拆分自 CONTRACTS_VERSION（0.4.0 起）；取值沿用拆分前最后一个契约版本，因此 0.3.1 生成的映射语义上即本版本。
+# 必须递增的条件（GoldChunkMap 的实际依赖，任一改变即递增）:
+#   - Chunk / Citation / EvalItem 中被解析器与校验器读取的字段语义；validate_eval_item；testset_version_from_path
+#   - normalize_text / split_quote_fragments / is_sole_match_eligible / QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH
+#   - MatchLevel 定义、FORMAL_MATCH_LEVELS、MATCH_LEVEL_REASON、GOLD_CHUNK_MAP_REPORT_COLUMNS
+#   - GoldChunkMap 字段 / serialize_gold_chunk_map / filename() / report_filename()（含 CORPUS_SHA_PREFIX_CHARS）
+#   - validate_gold_chunk_map 的接受条件
+# （清单 = resolver 与校验器实际触达的本文件符号，2026-10-01 AST 扫描；其中不含任何检索 / 打包 / 生成侧符号。）
+# 不随以下改动递增: 检索 / 打包 / 生成侧的契约（Hit、RetrievalResultRecord、retrieval_order_key、
+#   bm25_* 、pack_context、数值预算常量）。构建身份由 builder 三项另行绑定，不归本版本。
+# ⚠️ 递增依赖人按上述清单执行（没有 AST 守卫）。
+GOLD_CHUNK_MAP_SEMANTICS_VERSION = "0.3.1"
+
+# 拆分前（< 0.4.0）GoldChunkMap 带 contracts_version 字段、但没有 gold_chunk_map_semantics_version 字段的
+# 契约版本【闭集】（取自 git 历史: a1973ef = 0.2.0、b866134 = 0.3.0、d30ed34 = 0.3.1；ae33bc4 = 0.2.0-draft
+# 的 GoldChunkMap 无 contracts_version 字段）。拆分是一次性事件，本集合永不增长。
+# legacy 规则见 GoldChunkMap docstring 与 validate_gold_chunk_map。
+GOLD_CHUNK_MAP_PRE_SPLIT_CONTRACTS_VERSIONS: frozenset[str] = frozenset({"0.2.0", "0.3.0", "0.3.1"})
 
 
 # ==============================================================================
@@ -164,7 +193,9 @@ MAX_PROMPT_TOKENS: int = 1050
 #    共同结果，【不是缺陷】—— 是之前的预算把开销白送了。
 #    真实代价由 M1c 的 Recall@1/@2/@5 量化，不靠猜。
 # 好处: chunk 偏小时不白白浪费预算。
-# ⚠️ CD01 的 gold 是 3 个 chunk 跨 2 份手册 —— 在 765 chunk 预算下几乎必然装不全，
+# ⚠️ CD01 的 formal gold 是 5 个 chunk（3 条 citation）跨 2 份手册（canonical GoldChunkMap
+#    8cf9f3be…；旧写"3 个 chunk"从未由 canonical 映射实测支持，更正见 DECISIONS 2026-10-01）
+#    —— 在 765 chunk 预算下几乎必然装不全，
 #    这会成为 M1c 的一个真实观察（failure_tag="context_truncation"），
 #    【不要】为了让它装下而调大预算，那是为一道题优化。
 TOP_K_CONTEXT: int = 5
@@ -299,7 +330,8 @@ MIN_RELEVANCE: float = 0.35
 # 非 chunk 部分的 prompt 开销预留。[L2] owner_experiment: M1c
 #
 # ⚠️⚠️ 这个数【不应该长期是估算值】。系统提示词是固定的，可以用真 tokenizer
-#    精确量一次。M1c 开跑前【必须】实测替换，并把实测值记进 DECISIONS.md。
+#    精确量一次。packed-context 的最终结论（及据此写入 M2 预注册的数字）之前【必须】实测替换，
+#    并把实测值记进 DECISIONS.md。S8 固定-k 检索基线不读取本值（DECISIONS 2026-10-01 收窄）。
 #    ⚠️ 当前预算余量已归零（见 CONTEXT_PACK_BUDGET_TOKENS 的核算：TTFT 10.13s）。
 #      这意味着【任何低估都会直接破预算】。若实测是 250 而非 200，整条链要重算。
 #
@@ -312,8 +344,10 @@ MIN_RELEVANCE: float = 0.35
 # 这个取值没有校准！！
 #      实测时点: S4a 选定主模型后,用【该模型的 tokenizer】量四臂提示词初稿,
 #      立即替换本值;S10 预注册时用终稿再量一次锁死。
-#      ⚠️ 必须在 S8 之前完成 —— S8 要选 Recall 的 k 值(2 还是 3),
-#      k 由 chunk 预算决定,chunk 预算由本值决定。不先量,S8 的 k 值建立在猜测上。
+#      【2026-10-01 收窄，见 DECISIONS 同日条目】旧写法"必须在 S8 之前完成 —— S8 的 k 由 chunk
+#      预算决定"已被依赖审计取代: S8 固定-k 检索基线的评测截断点是预注册的固定集合，不由 chunk
+#      预算导出，也不读取本值；本值只进入 packed-context measurement 与最终打包结论。
+#      realized k 是 pack_context 的逐题输出，不是评测截断点。
 PROMPT_OVERHEAD_RESERVE_TOKENS: int = 200
 
 # 派生常量【唯一定义处】—— 组件一律用它，不要各自去算。
@@ -329,6 +363,7 @@ CONTEXT_PACK_BUDGET_TOKENS: int = int(
 # ⚠️ 10.13 > TTFT_BUDGET_S = 10.0。技术上仍破线，余量已归零。
 #    【不要】为了凑过线去把 CONTEXT_PACK_MARGIN 调成 0.88 —— 那是为了让数字好看而动参数。
 #    正确的反应是把 PROMPT_OVERHEAD_RESERVE_TOKENS 列为 M1c 开跑前的必测项。
+#    （该项属于 packed-context 线；S8 固定-k 检索基线不读取本常量，见 DECISIONS 2026-10-01。）
 
 # [L2] owner_experiment: 回填脚本首跑报告（按 L1+L2 命中率与误命中情况重定）
 #
@@ -361,6 +396,14 @@ QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH: int = 20
 #    诊断: 把 39 道题的 top-1 match_score 对【问题 token 数】做散点。
 #    若明显正相关 → 阈值在按问题长度而非证据质量分流，需改归一化（如按查询词数缩放）。
 #    现在不预先加复杂归一化 —— 那属于未测就写进架构（纪律四）。
+#
+# ⚠️【前提不变量，2026-10-01 S8 protocol apply】本映射要求 BM25 原始分 s ≥ 0。
+#    Okapi 原式 IDF = ln((N−n+0.5)/(n+0.5)) 在 n > N/2 时为负，可使 s < 0 →
+#    映射落到 0..1 之外（且在 s = −BM25_SCORE_SATURATION 处奇异），违反约定 1。
+#    因此任何 BM25 实现的 IDF 必须对全部 1 ≤ n ≤ N 恒非负；具体 IDF 公式、k1、b、analyzer
+#    属实验预注册，不在本文件。可执行形式见 bm25_match_score()。
+# ⚠️ 本映射严格单调，只用于分数归一化与 match_score 语义；【不参与】BM25 单路排序 ——
+#    排序用原始分 s 本身（见 retrieval_order_key）。
 BM25_SCORE_SATURATION: float = 10.0
 
 # 余弦相似度不需要新常量: (cos + 1) / 2 本身就是查询无关的固定映射。
@@ -561,10 +604,14 @@ class Hit:
     契约:
       - relevance = 【排序分】。恒 0.0..1.0，越大越相关。pack_context 依赖它降序。
         融合检索可以用 RRF 之类的纯排名方法产生它。
+          · bm25 baseline : bm25_match_score(s)，与 match_score【数值相同、字段语义不同】
+                            （人工裁决，DECISIONS 2026-10-01 blocker closure）
+          · vector / hybrid : 尚未冻结（随各自 protocol closure 裁决）
 
       - match_score = 【绝对匹配质量】。恒 0.0..1.0，且必须【查询无关】。
         它是 MIN_RELEVANCE 拒答判定的【唯一】依据。
-          · bm25   : s / (s + BM25_SCORE_SATURATION)
+          · bm25   : s / (s + BM25_SCORE_SATURATION)，要求 s ≥ 0（IDF 恒非负），
+                     可执行形式 bm25_match_score()
           · vector : (cos + 1) / 2
           · rrf hybrid : 【必然与 relevance 不同】。
             RRF 分数只由排名决定（Σ 1/(60+rank)），双路都排第一恒为 2/61 = 0.0328，
@@ -581,12 +628,89 @@ class Hit:
          用一个字段同时承担，要么排序失去信息，要么阈值失去意义 ——
          后者是【静默】的: 拒答率会直接变成 0%，不报任何错。
 
+      - 【三种分数必须区分（2026-10-01 S8 protocol apply）】RAW_SCORE ≠ RELEVANCE ≠ MATCH_SCORE:
+          RAW_SCORE   = 检索器内部未归一化的精确排序量（bm25 = 原始分 s；vector = 原始 cosine；
+                        rrf hybrid = 精确表示的 RRF 和）。检索器的全序由它决定
+                        （见 Retriever.search / retrieval_order_key）。本类【不】携带它 ——
+                        需要 RAW_SCORE / corpus_ordinal / kind 的消费方（评测、审计）用
+                        RetrievalResultRecord（Retriever.search_records），本类保持面向生产。
+          RELEVANCE   = 上面定义的排序分（0..1）。"按 relevance 降序"与"按 RAW_SCORE 全序"
+                        同时成立，要求 relevance 是 RAW_SCORE 的单调不减函数。
+          MATCH_SCORE = 上面定义的查询无关绝对匹配质量（0..1）。
+        任何持久化检索结果的 artifact 若记录分数，必须三者分开存，并各带 kind 标注
+        （raw_score_kind / relevance_kind / match_score_kind）；禁止只输出一个含义不明的 `score`。
+        逐 hit 的载体与序列化见 RetrievalResultRecord；kind 的取值词表与 artifact 其余 schema
+        属实验预注册，不在本文件。
+
       - origin 仅用于调试归因，不参与打分
     """
     chunk: Chunk
     relevance: float
     match_score: float
     origin: HitOrigin = "hybrid"
+
+
+# RetrievalResultRecord 三个 kind 字段的取值格式。取值词表本身属实验预注册，不在本文件。
+_SCORE_KIND_RE = re.compile(r"[a-z][a-z0-9_]*")
+
+
+@dataclass(frozen=True)
+class RetrievalResultRecord:
+    """一条检索结果的【评测 / 审计载体】。与 Hit 并列，不替代 Hit。
+
+    为什么不扩展 Hit（人工裁决，DECISIONS 2026-10-01 blocker closure）: Hit 面向生产
+    （pipeline / pack_context / 拒答）；本类服务 retriever → 评测 runner → 确定性 artifact。
+    bm25 / vector / hybrid 共用本类，不得各自发明记录格式。产出方式见 Retriever.search_records。
+
+    契约（构造时校验，违反抛 ContractViolation）:
+      - chunk: 被检索到的 Chunk。chunk_id 是 chunk.id 的只读投影，不是独立字段，二者不可能不一致。
+      - corpus_ordinal: 该 chunk 在 canonical corpus/chunks.jsonl 中的【0-based 物理行序】（第一行 = 0）。
+        int（不含 bool），≥ 0。它【不是】pdf_page、不是页内 chunk 序号、不是 chunk_id 的字典序位置；
+        只用于确定性 tie-break 与 provenance / 审计。与语料的对应由 validate_retrieval_records 校验。
+      - raw_score: 检索器的精确排序量 RAW_SCORE（见 Hit）。类型只能是 float 或 fractions.Fraction
+        （精确 RRF 和）；有限；不接受 bool / int / float 子类（如 numpy 标量 —— 调用方先转 float）。
+        未归一化，不要求在 0..1。全序只由它与 corpus_ordinal 决定（retrieval_order_key）。
+      - relevance: 排序导向的归一化分（见 Hit）。float，0.0..1.0。
+      - match_score: 查询无关的绝对匹配质量（见 Hit），面向 MIN_RELEVANCE 的【唯一】字段。float，0.0..1.0。
+      - raw_score_kind / relevance_kind / match_score_kind: 各自分数的计算口径标注；
+        非空，只含 [a-z0-9_]，以小写字母开头。三者是【独立字段】—— 数值相同（如 bm25 baseline 的
+        relevance 与 match_score）也各自保存；消费方不得互换 relevance 与 match_score。
+      - 不含任何评测 / gold 信息（question_id、gold 标记、命中判定都不在本类）；不含 latency 与墙钟时间 ——
+        本类的序列化进入哈希的 normative artifact。rank 不存：它就是记录在返回序列中的位置。
+
+    序列化见 retrieval_record_json_object / serialize_retrieval_record。
+    """
+    chunk: Chunk
+    corpus_ordinal: int
+    raw_score: float | Fraction
+    raw_score_kind: str
+    relevance: float
+    relevance_kind: str
+    match_score: float
+    match_score_kind: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.chunk, Chunk):
+            raise ContractViolation(f"chunk 必须是 Chunk，得到 {type(self.chunk).__name__}")
+        if not (type(self.raw_score) is float or isinstance(self.raw_score, Fraction)):
+            raise ContractViolation(
+                f"raw_score 必须是 float 或 Fraction，得到 {type(self.raw_score).__name__}"
+            )
+        # 有限性与 corpus_ordinal 的类型 / 非负校验只有一个实现处。
+        retrieval_order_key(self.raw_score, self.corpus_ordinal)
+        for name in ("relevance", "match_score"):
+            value = getattr(self, name)
+            # NaN 与任何值比较都为假，因此被区间检查拒绝。
+            if type(value) is not float or not (0.0 <= value <= 1.0):
+                raise ContractViolation(f"{name} 必须是 0.0..1.0 的 float，得到 {value!r}")
+        for name in ("raw_score_kind", "relevance_kind", "match_score_kind"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not _SCORE_KIND_RE.fullmatch(value):
+                raise ContractViolation(f"{name} 格式非法（需 [a-z][a-z0-9_]*）: {value!r}")
+
+    @property
+    def chunk_id(self) -> str:
+        return self.chunk.id
 
 
 @dataclass(frozen=True)
@@ -695,11 +819,18 @@ class GoldChunkMap:
          （每条 citation 一行，列见 GOLD_CHUNK_MAP_REPORT_COLUMNS）。
          一个数据结构不要同时干"提供映射"和"承载审计"两件事。
       ⚠️ 本类【不含时间戳】（v0.3.0 删除 built_at）。
-         它不进 Git，可再生是前提；EvalItemResult.gold_chunk_map_sha256 记录的是
+         它是派生产物，逐字节可再生是前提；canonical 映射及其 report.csv 另按 DECISIONS
+         2026-09-28（TRACK_CANONICAL_MAP_AND_REPORT_IN_GIT）冻结入 Git
+         （旧写"它不进 Git"已被该决定取代，叙述更正见 DECISIONS 2026-10-01）。
+         EvalItemResult.gold_chunk_map_sha256 记录的是
          serialize_gold_chunk_map() 输出的字节哈希。墙钟时间会让同输入两次生成的
          哈希不同，已记录的结果就再也对不上再生的映射。运行时间只许打到 stdout / log。
       ⚠️ Recall 在一题多 gold chunk 时按 ANY / ALL / coverage 哪种判命中，
-         【不由本类决定】—— 那是 metric 契约（owner: M1c / S8，尚未冻结）。
+         【不由本类决定】—— S8 固定-k 指标协议（ANY_GOLD / GOLD_COVERAGE / ALL_MAPPED_GOLD）
+         由 S8 预注册定义（DECISIONS 2026-10-01）。
+      ⚠️ 本类【不表达】同一道题多条 citation 之间的逻辑关系（AND / OR / 仅佐证）。
+         mapping 是各 citation formal cover 的并集，因此 gold ⊆ top-k（ALL_MAPPED_GOLD）
+         只是严格诊断量，【不得】称为 answer-level complete evidence。
 
     ── identity 字段 ─────────────────────────────────────────────────────────
       testset_version      由 testset_version_from_path() 从评测集文件名导出，禁止手写。
@@ -738,15 +869,31 @@ class GoldChunkMap:
         也无法由冻结输入重建核验"的情形，本边界必须重新打开；
         届时不得再声称语料哈希足以承担唯一字节锚。
 
-      contracts_version    = CONTRACTS_VERSION。解析语义一变，旧映射即不能作为当前 canonical 映射
-                           （不表示它在自己的 identity 下历史无效），必须可追溯。
+      ── 版本（0.4.0 起拆分，DECISIONS 2026-10-01 final protocol closure）──
+      contracts_version    = 生成时的 CONTRACTS_VERSION（整模块版本）。只作 provenance，【不参与】兼容判定 ——
+                           只改检索 / 打包等无关语义的契约递增不得使映射失效。
+      gold_chunk_map_semantics_version
+                           = 生成时的 GOLD_CHUNK_MAP_SEMANTICS_VERSION。【兼容判定的唯一依据】:
+                           与当前 GOLD_CHUNK_MAP_SEMANTICS_VERSION 不等 → 不能作为当前 canonical 映射
+                           （不表示它在自己的 identity 下历史无效）。拆分后生成的映射必须写入本字段。
+      legacy 规则（只服务拆分前生成的历史映射，不看文件名 / 路径 / mtime / 日期）:
+                           本字段缺失（None）的映射是拆分前 schema。当且仅当其 contracts_version 属于
+                           GOLD_CHUNK_MAP_PRE_SPLIT_CONTRACTS_VERSIONS（拆分前带该字段的契约版本闭集）时，
+                           把 contracts_version 读作它的 GoldChunkMap 语义版本（拆分前二者是同一个数）；
+                           contracts_version 不在该闭集 → 拆分后生成却缺字段 → 拒绝。
+                           本字段存在但 contracts_version 属于该闭集 → 拆分前不可能写出本字段 → 拒绝。
+                           例: canonical 映射 8cf9f3be…（contracts_version="0.3.1"，无本字段）→ 语义版本 0.3.1。
 
     ── 确定性 ────────────────────────────────────────────────────────────────
       同一输入两次生成，serialize_gold_chunk_map() 的输出必须逐字节相同。
       candidate / formal chunk 的顺序一律用 corpus 顺序（chunks.jsonl 行序）；
       该顺序只用于枚举与序列化，【不得】用于消歧（见 MatchLevel）。
 
-    再生方式（这是它可以不进 Git 的前提）:
+    逐字节再生的作用域 = 【原生成身份】（生成时的 resolver 代码 + 契约语义 + 输入）。实测（DECISIONS 2026-10-01）:
+      canonical 映射 8cf9f3be… 由其原生成代码（contracts d30ed34 + resolver 8719761）逐字节再生；
+      0.4.0 resolver 再生的 mapping 与 report.csv 相同，但版本字段不同（contracts_version 0.4.0、新增语义版本字段），
+      不要求、也不声称与历史文件逐字节相同 —— 这不是历史可复现性失败。历史 artifact 保持冻结，按 legacy 规则仍被接受。
+    再生方式（canonical 映射另已冻结入 Git）:
         python3 scripts/resolve_gold_chunks.py --chunks corpus/chunks.jsonl \\
             --testset eval/testset_v5_3.jsonl --corpus-sha <8 位或 64 位> \\
             --out-dir eval/gold_chunk_map/
@@ -757,9 +904,10 @@ class GoldChunkMap:
     corpus_builder_name: str      # 见上方 construction identity 四层
     construction_rules_sha256: str  # 见上方 construction identity 四层
     chunker_config: str           # 见上方 construction identity 四层
-    contracts_version: str        # = CONTRACTS_VERSION；解析语义一变，旧映射即不能作为当前
-                                  # canonical 映射，必须可追溯是用哪版契约生成的
+    contracts_version: str        # = 生成时的 CONTRACTS_VERSION；只作 provenance，见上方"版本"
     mapping: dict[str, list[str]]           # question_id -> [chunk_id, ...]，见上方键约束
+    # 放在最后且默认 None: 拆分前 schema 的映射（无此键）仍能按原样构造，序列化时省略 → 原字节不变。
+    gold_chunk_map_semantics_version: str | None = None   # 见上方"版本"与 legacy 规则
 
     def filename(self) -> str:
         """映射文件的标准文件名（不含目录）。
@@ -1047,6 +1195,8 @@ def validate_eval_item(item: EvalItem) -> None:
 _TESTSET_FILENAME_RE = re.compile(r"^testset_v(0|[1-9][0-9]*)_(0|[1-9][0-9]*)\.jsonl$")
 _TESTSET_VERSION_RE = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+# contracts_version / gold_chunk_map_semantics_version 的格式（X.Y.Z）。
+_SEMVER_RE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 # corpus_builder_name 会进文件名，只允许文件名安全字符。
 _BUILDER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
@@ -1088,6 +1238,31 @@ class CorpusBuilderIdentity(Protocol):
     def construction_rules_identity(self) -> str: ...
 
 
+def _gold_chunk_map_semantics_version_of(gold_map: GoldChunkMap) -> str:
+    """一份映射的 GoldChunkMap 语义版本（显式字段，或拆分前 schema 的 legacy 规则）。违反抛 ContractViolation。
+
+    只读映射自身的两个版本字段，不看文件名 / 路径 / mtime / 日期，不做版本区间推断。规则见 GoldChunkMap docstring。
+    """
+    contracts_version = gold_map.contracts_version
+    explicit = gold_map.gold_chunk_map_semantics_version
+    if not isinstance(contracts_version, str) or not _SEMVER_RE.fullmatch(contracts_version):
+        raise ContractViolation(f"contracts_version 格式非法（需 X.Y.Z）: {contracts_version!r}")
+    if explicit is None:
+        if contracts_version not in GOLD_CHUNK_MAP_PRE_SPLIT_CONTRACTS_VERSIONS:
+            raise ContractViolation(
+                f"缺少 gold_chunk_map_semantics_version，且 contracts_version {contracts_version!r} 不属于拆分前闭集 "
+                f"{sorted(GOLD_CHUNK_MAP_PRE_SPLIT_CONTRACTS_VERSIONS)}：拆分后生成的映射必须显式写出语义版本"
+            )
+        return contracts_version
+    if not isinstance(explicit, str) or not _SEMVER_RE.fullmatch(explicit):
+        raise ContractViolation(f"gold_chunk_map_semantics_version 格式非法（需 X.Y.Z）: {explicit!r}")
+    if contracts_version in GOLD_CHUNK_MAP_PRE_SPLIT_CONTRACTS_VERSIONS:
+        raise ContractViolation(
+            f"contracts_version {contracts_version!r} 属于拆分前版本，不可能写出 gold_chunk_map_semantics_version"
+        )
+    return explicit
+
+
 def validate_gold_chunk_map(
     gold_map: GoldChunkMap,
     items: Sequence[EvalItem],
@@ -1100,10 +1275,11 @@ def validate_gold_chunk_map(
     """校验一份 GoldChunkMap 能否被接受为【当前】canonical GoldChunkMap。不满足抛 ContractViolation。
 
     作用域: CURRENT_CANONICAL_ONLY。
-      本函数判断的是"能否在当前 canonical 语料与当前可执行契约下被接受"，
+      本函数判断的是"能否在当前 canonical 语料与当前 GoldChunkMap 语义下被接受"，
       【不是】通用的历史 artifact 校验器。一份记录旧 corpus sha、旧 builder/config identity
-      或旧 contracts_version 的历史映射，可能在它自己的 identity 下是有效的历史产物；
+      或旧 GoldChunkMap 语义版本的历史映射，可能在它自己的 identity 下是有效的历史产物；
       它在这里被拒绝只表示"不能作为当前 canonical 映射使用"，【不表示】它当年无效。
+      contracts_version（整模块版本）只作 provenance，不参与接受判定（0.4.0 拆分）。
 
     输入:
       - items: 生成该映射所用的评测集，【按文件顺序】。本函数会对每条调用 validate_eval_item。
@@ -1120,7 +1296,11 @@ def validate_gold_chunk_map(
         corpus_builder_name == builder.CORPUS_BUILDER_NAME（且文件名安全）；
         construction_rules_sha256 == builder.construction_rules_identity()（且为 64 位小写十六进制）；
         chunker_config == builder.effective_chunker_config_identity()；
-        contracts_version == CONTRACTS_VERSION
+        contracts_version 为 X.Y.Z 格式（只作 provenance）；
+        GoldChunkMap 语义版本 == GOLD_CHUNK_MAP_SEMANTICS_VERSION —— 语义版本取
+        gold_chunk_map_semantics_version；该字段缺失时按 legacy 规则（见 GoldChunkMap docstring）:
+        contracts_version ∈ GOLD_CHUNK_MAP_PRE_SPLIT_CONTRACTS_VERSIONS 则以它为语义版本，否则拒绝；
+        字段存在而 contracts_version 属于拆分前闭集 → 拒绝
       - fail-closed: 每条 answer citation 的级别都必须在 FORMAL_MATCH_LEVELS；
         L1 恰 1 个 chunk，L2 至少 2 个，且无重复
       - mapping 键【恰好】是 answer 题、按评测集顺序；拒答题不得出现
@@ -1158,9 +1338,10 @@ def validate_gold_chunk_map(
     for name, expected in expected_identity:
         if getattr(gold_map, name) != expected:
             raise ContractViolation(f"{name} {getattr(gold_map, name)!r} != 权威 builder 导出 {expected!r}")
-    if gold_map.contracts_version != CONTRACTS_VERSION:
+    semantics_version = _gold_chunk_map_semantics_version_of(gold_map)
+    if semantics_version != GOLD_CHUNK_MAP_SEMANTICS_VERSION:
         raise ContractViolation(
-            f"contracts_version {gold_map.contracts_version!r} != {CONTRACTS_VERSION!r}"
+            f"GoldChunkMap 语义版本 {semantics_version!r} != 当前 {GOLD_CHUNK_MAP_SEMANTICS_VERSION!r}"
         )
 
     position: dict[str, int] = {}
@@ -1217,13 +1398,18 @@ def serialize_gold_chunk_map(gold_map: GoldChunkMap) -> str:
     契约:
       - 字段顺序 = dataclass 字段顺序；mapping 保持插入顺序（不 sort_keys，
         键序已由 validate_gold_chunk_map 约束为评测集顺序）
+      - gold_chunk_map_semantics_version 为 None（拆分前 schema）时【省略该键】，
+        因此拆分前映射经 解析 → 本函数 后逐字节不变；不为 None 时作为最后一个键写出
       - ensure_ascii=False，indent=2，末尾恰一个换行
       - 同一 GoldChunkMap 两次调用逐字节相同；EvalItemResult.gold_chunk_map_sha256
         即对本函数输出（UTF-8 编码）取的 SHA-256
       - 本函数【不做】接受性校验。调用方必须先通过 validate_gold_chunk_map()，
         未被接受的映射不得序列化落盘。
     """
-    return json.dumps(asdict(gold_map), ensure_ascii=False, indent=2) + "\n"
+    payload = asdict(gold_map)
+    if payload["gold_chunk_map_semantics_version"] is None:
+        del payload["gold_chunk_map_semantics_version"]
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
 
 
 def validate_answer(answer: Answer) -> None:
@@ -1300,6 +1486,246 @@ def pack_context(hits: Sequence[Hit],
     return packed
 
 
+def retrieval_order_key(ranking_score: numbers.Real, corpus_ordinal: numbers.Integral) -> tuple:
+    """检索结果确定性全序的排序键。bm25 / vector / hybrid 共用这【一个】定义。
+
+    用法: sorted(candidates, key=lambda c: retrieval_order_key(c.raw, c.ordinal))，
+    排序结果的前 k 个即 Retriever.search 的返回顺序。返回值只用于比较，不得解析其内部结构。
+
+    契约:
+      - 主键 = ranking_score 降序。ranking_score 是该检索器的【精确】排序量（RAW_SCORE，见 Hit）:
+        bm25 = 原始 BM25 分 s；vector = 原始 cosine；rrf hybrid = 精确表示的 RRF 和
+        （用 fractions.Fraction 等精确有理数；浮点累加顺序会制造或抹掉 tie，禁止）。
+      - 次键 = corpus_ordinal 升序，【仅在】ranking_score 完全相等时生效；非 tie 的相对顺序不变。
+        corpus_ordinal = 该 chunk 在 canonical chunks.jsonl 中的行序位置。调用方必须保证同一次
+        排序中 corpus_ordinal 互不相同，否则不构成全序（本函数只看单个候选，查不出重复）。
+      - 不读取任何评测 / gold 信息；禁止改用 chunk_id 字典序或 doc/page 排序打破 tie。
+      - ranking_score 必须是有限实数（numbers.Real，不含 bool）；NaN / ±inf → ContractViolation。
+        NaN 与任何值比较都为假，会让排序结果依赖输入顺序，即静默失去确定性。
+      - corpus_ordinal 必须是 ≥ 0 的整数（numbers.Integral，不含 bool），否则 ContractViolation。
+    """
+    if isinstance(ranking_score, bool) or not isinstance(ranking_score, numbers.Real):
+        raise ContractViolation(f"ranking_score 必须是实数（不含 bool），得到 {type(ranking_score).__name__}")
+    if not isinstance(ranking_score, numbers.Rational) and not math.isfinite(ranking_score):
+        raise ContractViolation(f"ranking_score 必须有限，得到 {ranking_score!r}")
+    if isinstance(corpus_ordinal, bool) or not isinstance(corpus_ordinal, numbers.Integral):
+        raise ContractViolation(f"corpus_ordinal 必须是整数（不含 bool），得到 {type(corpus_ordinal).__name__}")
+    if corpus_ordinal < 0:
+        raise ContractViolation(f"corpus_ordinal 必须 ≥ 0，得到 {corpus_ordinal!r}")
+    return (-ranking_score, int(corpus_ordinal))
+
+
+def bm25_match_score(raw_score: numbers.Real) -> float:
+    """BM25 原始分 s → match_score 的【唯一】映射: s / (s + BM25_SCORE_SATURATION)。
+
+    契约:
+      - 查询无关（约定 1）: 输出只依赖这一个 hit 自己的原始分，不看本次返回的其他结果。
+      - s 必须是有限、≥ 0 的实数（不含 bool）。s < 0 / NaN / ±inf → ContractViolation。
+        s < 0 说明所用 IDF 变体可以为负（如 Okapi 原式在 n > N/2 时），
+        违反 BM25_SCORE_SATURATION 处的前提不变量。
+      - 返回 0.0..1.0；s = 0 → 0.0，s = BM25_SCORE_SATURATION → 0.5；对 s 单调不减
+        （浮点精度下，极大的 s 可能映射到同一个值）。
+      - 只给出 match_score 的数值。BM25 单路排序用原始分 s（见 retrieval_order_key），不用本值。
+    """
+    if isinstance(raw_score, bool) or not isinstance(raw_score, numbers.Real):
+        raise ContractViolation(f"BM25 原始分必须是实数（不含 bool），得到 {type(raw_score).__name__}")
+    if not isinstance(raw_score, numbers.Rational) and not math.isfinite(raw_score):
+        raise ContractViolation(f"BM25 原始分必须有限，得到 {raw_score!r}")
+    if raw_score < 0:
+        raise ContractViolation(
+            f"BM25 原始分 {raw_score!r} < 0：IDF 必须恒非负（见 BM25_SCORE_SATURATION 的前提不变量）"
+        )
+    s = float(raw_score)
+    return s / (s + BM25_SCORE_SATURATION)
+
+
+def bm25_accumulate(query_tokens: Sequence[str], term_contribution: Callable[[str], numbers.Real]) -> float:
+    """BM25 原始分 s(q, d) 的【唯一】累加方式（人工裁决 BM25_QUERY_TERM_SEMANTICS = MULTISET、
+    BM25_ACCUMULATION = math.fsum，DECISIONS 2026-10-01 final protocol closure 及其 mathematical-semantics 补充）。
+
+    输入:
+      - query_tokens: analyzer 对 query 的输出序列（保留重复）。类型必须是 list 或 tuple；
+        set / frozenset / dict 及其视图 / Counter / 生成器 / str 一律 ContractViolation。
+        这是防止调用方传入已去重或无序表示的 API 闸门，【不】表示元素顺序影响结果。元素必须是非空 str。
+      - term_contribution: 对【同一个文档 d】给出单个 token 的 BM25 贡献
+        IDF(t) · tf · (k1+1) / (tf + k1 · (1 − b + b · |d| / avgdl))（公式与参数属实验预注册）。
+        必须是 token 的【纯函数】（同一 token 恒给同一值），返回有限、≥ 0 的实数（不含 bool），否则 ContractViolation。
+    契约（冻结的是数学语义，不是回调执行轨迹）:
+      - 贡献多重集 C = [term_contribution(t) for t in query_tokens]：【每一次出现】恰好对应 C 中一个元素（MULTISET）。
+        ["alcohol", "alcohol", "testing"] → C = [c(alcohol), c(alcohol), c(testing)]。不得先去重。
+      - 返回 math.fsum(C)，float，≥ 0。fsum 对有限输入给出精确和的正确舍入，结果只取决于 C 这个多重集，
+        与元素顺序无关；也不受 CPython 3.12 起内建 sum() 改用补偿求和的影响。
+      - term_contribution 被调用的次数与顺序【不是契约】：本实现对每个不同 token 求值一次、按出现次数展开；
+        其他实现（逐次求值、预先查表）只要 C 相同即合法。合法缓存不得改变结果。
+      - query_tokens 为空 → 0.0（"确实没检索到"由调用方据 s > 0 过滤，见预注册）。
+    """
+    if type(query_tokens) not in (list, tuple):
+        raise ContractViolation(
+            f"query_tokens 必须是 list 或 tuple（analyzer 输出序列），得到 {type(query_tokens).__name__}"
+        )
+    contribution_of: dict[str, numbers.Real] = {}
+    for token in query_tokens:
+        if not isinstance(token, str) or not token:
+            raise ContractViolation(f"query token 必须是非空 str，得到 {token!r}")
+        if token in contribution_of:
+            continue
+        value = term_contribution(token)
+        if isinstance(value, bool) or not isinstance(value, numbers.Real):
+            raise ContractViolation(f"{token!r} 的贡献必须是实数（不含 bool），得到 {type(value).__name__}")
+        if not math.isfinite(value) or value < 0:
+            raise ContractViolation(f"{token!r} 的贡献必须有限且 ≥ 0，得到 {value!r}")
+        contribution_of[token] = value
+    return math.fsum([contribution_of[token] for token in query_tokens])
+
+
+def validate_retrieval_records(records: Sequence[RetrievalResultRecord], *, k: int,
+                               corpus_chunk_ids: Sequence[str]) -> None:
+    """校验一次 Retriever.search_records 的返回序列。不满足抛 ContractViolation。
+
+    输入:
+      - records: search_records(query, k) 的返回值，原样、按返回顺序。空序列合法（约定 2）。
+      - k: 该次调用传入的 k。int（不含 bool），≥ 1。
+      - corpus_chunk_ids: canonical corpus/chunks.jsonl 的全部 chunk id，【按物理行序】
+        （下标即 0-based 行序）。调用方负责它与所评测语料是同一份字节。
+    检查:
+      - len(records) ≤ k；每项是 RetrievalResultRecord
+      - corpus_chunk_ids[corpus_ordinal] == chunk_id（越界或 1-based 漂移即抛）；corpus_ordinal 互不相同
+      - 相邻两项 retrieval_order_key 严格递增（RAW_SCORE 降序，精确相等时 corpus_ordinal 升序）
+      - 同一序列内 raw_score_kind / relevance_kind / match_score_kind 各自恒定
+      - relevance 是 RAW_SCORE 的单调不减函数: RAW_SCORE 精确相等 → relevance 相等；沿序列 relevance 非增
+      - match_score【不】要求随序列单调（hybrid 取各路 max，与融合排名无单调关系）
+    不检查（本函数看不到）: 这些记录确实是全部候选在全序下的前 k 项；分数确实按所声明的 kind 算出；
+    检索器专属的过滤规则（如 bm25 只返回 RAW_SCORE > 0，属实验预注册）。
+    返回 None 表示通过。
+    """
+    if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+        raise ContractViolation(f"k 必须是 ≥ 1 的 int，得到 {k!r}")
+    if len(records) > k:
+        raise ContractViolation(f"返回 {len(records)} 条 > k={k}")
+    for record in records:
+        if not isinstance(record, RetrievalResultRecord):
+            raise ContractViolation(f"期望 RetrievalResultRecord，得到 {type(record).__name__}")
+    seen: set[int] = set()
+    for record in records:
+        if record.corpus_ordinal >= len(corpus_chunk_ids):
+            raise ContractViolation(
+                f"corpus_ordinal {record.corpus_ordinal} 越界（语料 {len(corpus_chunk_ids)} 行）"
+            )
+        if corpus_chunk_ids[record.corpus_ordinal] != record.chunk_id:
+            raise ContractViolation(
+                f"corpus_ordinal {record.corpus_ordinal} 处是 {corpus_chunk_ids[record.corpus_ordinal]!r}，"
+                f"不是 {record.chunk_id!r}（corpus_ordinal 必须是 0-based 物理行序）"
+            )
+        if record.corpus_ordinal in seen:
+            raise ContractViolation(f"corpus_ordinal {record.corpus_ordinal} 重复")
+        seen.add(record.corpus_ordinal)
+    for name in ("raw_score_kind", "relevance_kind", "match_score_kind"):
+        kinds = {getattr(record, name) for record in records}
+        if len(kinds) > 1:
+            raise ContractViolation(f"同一次检索混用了多个 {name}: {sorted(kinds)}")
+    for prev, cur in zip(records, records[1:]):
+        if not (retrieval_order_key(prev.raw_score, prev.corpus_ordinal)
+                < retrieval_order_key(cur.raw_score, cur.corpus_ordinal)):
+            raise ContractViolation(
+                f"{prev.chunk_id} → {cur.chunk_id} 违反全序（RAW_SCORE 降序，精确相等时 corpus_ordinal 升序）"
+            )
+        if prev.raw_score == cur.raw_score and prev.relevance != cur.relevance:
+            raise ContractViolation(f"{prev.chunk_id} / {cur.chunk_id}: RAW_SCORE 相等但 relevance 不等")
+        if cur.relevance > prev.relevance:
+            raise ContractViolation(f"{prev.chunk_id} → {cur.chunk_id}: relevance 沿全序上升")
+
+
+# RetrievalResultRecord 序列化的字段与顺序【唯一定义处】。
+RETRIEVAL_RECORD_JSON_FIELDS: tuple[str, ...] = (
+    "chunk_id", "corpus_ordinal",
+    "raw_score", "raw_score_kind",
+    "relevance", "relevance_kind",
+    "match_score", "match_score_kind",
+)
+
+
+def retrieval_record_json_object(record: RetrievalResultRecord) -> dict:
+    """RetrievalResultRecord → JSON 对象（dict，键按 RETRIEVAL_RECORD_JSON_FIELDS 顺序插入）。
+
+    契约:
+      - 只含 RETRIEVAL_RECORD_JSON_FIELDS。chunk 正文与其余 Chunk 字段不进入，
+        由 chunk_id + corpus 身份追溯。
+      - raw_score: float → JSON 数；Fraction → JSON 字符串 "<分子>/<分母>"（最简、分母 > 0，
+        分母为 1 也写 "/1"），无损。消费方按 raw_score_kind 解释类型，不得把两种表示混算。
+      - relevance / match_score: JSON 数。任何字段都不舍入。
+    """
+    if not isinstance(record, RetrievalResultRecord):
+        raise ContractViolation(f"期望 RetrievalResultRecord，得到 {type(record).__name__}")
+    raw = record.raw_score
+    raw_json = f"{raw.numerator}/{raw.denominator}" if isinstance(raw, Fraction) else raw
+    values = {
+        "chunk_id": record.chunk_id,
+        "corpus_ordinal": record.corpus_ordinal,
+        "raw_score": raw_json,
+        "raw_score_kind": record.raw_score_kind,
+        "relevance": record.relevance,
+        "relevance_kind": record.relevance_kind,
+        "match_score": record.match_score,
+        "match_score_kind": record.match_score_kind,
+    }
+    return {name: values[name] for name in RETRIEVAL_RECORD_JSON_FIELDS}
+
+
+def serialize_retrieval_record(record: RetrievalResultRecord) -> str:
+    """单条记录的确定性 JSON 文本（UTF-8 落盘；不含换行）。
+
+    = json.dumps(retrieval_record_json_object(record), ensure_ascii=False, separators=(",", ":"),
+    allow_nan=False)。不 sort_keys —— 字段顺序由 RETRIEVAL_RECORD_JSON_FIELDS 固定。
+    同一记录两次调用逐字节相同。嵌入更大的 JSONL 行时，用 retrieval_record_json_object 并以同样参数
+    dumps，所得子串与本函数输出相同。
+    """
+    return json.dumps(retrieval_record_json_object(record), ensure_ascii=False,
+                      separators=(",", ":"), allow_nan=False)
+
+
+def _check_canonical_json_value(value: object, path: str) -> None:
+    if value is None or isinstance(value, (str, bool, int)):
+        return
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ContractViolation(f"{path}: 非有限 float {value!r} 不可进入 digest")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _check_canonical_json_value(item, f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ContractViolation(f"{path}: dict 键必须是 str，得到 {type(key).__name__}")
+            _check_canonical_json_value(item, f"{path}.{key}")
+        return
+    raise ContractViolation(f"{path}: 类型 {type(value).__name__} 不可进入 digest（不猜转换）")
+
+
+def canonical_json_bytes(payload: object) -> bytes:
+    """digest 输入的【唯一】规范字节形式。跨实验共用（S8 起的各 *_digest；未来 IndexManifest 的协议身份）。
+
+    规则:
+      - json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        再 UTF-8 编码；末尾【不】加换行；不做 Unicode 规范化（字符串按原样编码）。
+      - 允许的值（递归）: dict（键必须是 str）、list / tuple（同为 JSON 数组）、str、int、bool、
+        None、有限 float。其余类型（set、Fraction、bytes、numpy 标量、float 子类、自定义对象）
+        → ContractViolation，不猜转换。
+      - dict 插入顺序不影响输出（sort_keys，按码点序）；数组顺序【影响】输出（顺序有语义）。
+    调用方义务（本函数无法识别）: payload 不得含 Python repr、未冻结字节的散文、墙钟时间、本机绝对路径。
+    已有组件内的 digest（construction_rules_identity、ocr_params_digest）各有冻结口径，不迁移到本函数。
+    """
+    _check_canonical_json_value(payload, "$")
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def canonical_sha256(payload: object) -> str:
+    """canonical_json_bytes(payload) 的 SHA-256，64 位小写十六进制。payload 约束同 canonical_json_bytes。"""
+    return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+
+
 # ==============================================================================
 # 组件接口
 #
@@ -1344,12 +1770,31 @@ class Retriever(Protocol):
 
         契约:
           - 返回 0..k 个 Hit，按 relevance 降序
+          - 【确定性全序（2026-10-01 S8 protocol apply）】返回顺序 = 按
+            retrieval_order_key(ranking_score, corpus_ordinal) 升序取前 k 个:
+            先按本检索器的精确排序量 RAW_SCORE 降序（见 Hit），仅当 RAW_SCORE【完全相等】时
+            按 corpus_ordinal（chunk 在 canonical chunks.jsonl 中的行序位置）升序。
+            bm25 / vector / hybrid 共用这一条规则；禁止用 chunk_id 字典序、doc/page 排序
+            或任何评测 / gold 信息打破 tie。同一输入两次调用必须返回相同的序列。
+            relevance 是 RAW_SCORE 的单调不减函数（见 Hit），故上一条"按 relevance 降序"仍成立。
           - 【必须同时填 relevance 与 match_score】，两者恒 0..1。
             match_score 的归一化必须【查询无关】（见约定 1 与 Hit 的契约）——
             禁止 per-query min-max / softmax，那会让拒答机制静默失效
           - query 为空或全空白 → 返回 []（有意义的"确实没有"，不是异常）
           - 索引损坏、后端不可达 → 抛 RetrievalError，禁止静默返回 []
           - 【禁止】在本层做拒答判断。拒答由 pipeline 依据 MIN_RELEVANCE 决定
+        """
+        ...
+
+    def search_records(self, query: str, k: int = TOP_K_RETRIEVE) -> Sequence[RetrievalResultRecord]:
+        """同一次检索的评测 / 审计投影: 额外给出 RAW_SCORE、corpus_ordinal 与三个 kind。
+
+        契约:
+          - 与 search(query, k) 一一对应: 长度相同、顺序相同，第 i 项的 chunk / relevance / match_score
+            与 search 的第 i 个 Hit 相同。两者是同一次排序的两种投影，不得各自实现排序。
+          - 返回序列必须通过 validate_retrieval_records(records, k=k, corpus_chunk_ids=<canonical 行序>)。
+          - 空 query → []；异常 → RetrievalError；不做拒答判断 —— 同 search。
+          - 不接收、不读取任何评测 / gold 信息；question_id 只能在返回之后由调用方作为 join key 使用。
         """
         ...
 
@@ -1422,7 +1867,7 @@ class Generator(Protocol):
 #    → 属实验配置（experiments/exp_XXX.yaml），是 M1c/M5 要扫的对象。
 #
 # 6. M1c 的向量存储方案（穷举 cosine / .npy 落点 / numpy 是否放行）
-#    → 属实验实现。3309×1024×4B ≈ 13 MB，穷举扫描不是瓶颈；
+#    → 属实验实现。3409×1024×4B ≈ 14 MB（canonical corpus c8978777… / 3409 chunks），穷举扫描不是瓶颈；
 #      M1c 要答的是"向量检索有没有价值"，不是"哪个向量库好"。
 #      船端向量 runtime 由 M6 决定，【实验后端不等于架构事实】——
 #      "Ollama 能跑 ≠ llama.cpp 能跑"这个错已经犯过一次。
@@ -1433,6 +1878,33 @@ class Generator(Protocol):
 # 边界的判据: 一个值如果【会被实验重新校准】，它属配置或预注册；
 #             一个值如果【组件之间必须对齐才能互操作】，它属本文件。
 
+
+# ==============================================================================
+# 0.4.0 相对 0.3.1 的改动记录（S8 protocol apply / blocker closure / final protocol closure，DECISIONS 2026-10-01 三个条目）
+# ==============================================================================
+# 【R1】Retriever.search 增加确定性全序: (−RAW_SCORE, corpus_ordinal)，tie 只由 corpus 行序打破；
+#    可执行形式 retrieval_order_key()。
+# 【R2】Hit 写明 RAW_SCORE / RELEVANCE / MATCH_SCORE 三者区分；持久化分数必须各带 kind。
+# 【R3】BM25 原始分 s ≥ 0（IDF 恒非负）作为 BM25_SCORE_SATURATION 的前提不变量；
+#    可执行形式 bm25_match_score()。饱和映射不参与 BM25 单路排序。
+# 【R4】叙述更正: CD01 = 5 chunks / 3 citations；GoldChunkMap 已冻结入 Git；3309 → 3409；
+#    PROMPT_OVERHEAD_RESERVE_TOKENS 的 S8 顺序叙述按依赖审计收窄；GoldChunkMap 不表达多 citation 逻辑。
+# 【R5】RetrievalResultRecord + Retriever.search_records + validate_retrieval_records
+#    + retrieval_record_json_object / serialize_retrieval_record: 独立于 Hit 的逐 hit 评测载体，
+#    corpus_ordinal = 0-based 物理行序，三个分数与三个 kind 分开保存。Hit 未改。
+# 【R6】Hit.relevance 写明 bm25 baseline = bm25_match_score(s)（与 match_score 数值相同、
+#    字段语义不同）；vector / hybrid 的 relevance 未冻结。
+# 【R7】canonical_json_bytes / canonical_sha256: 跨实验共用的 digest 规范字节。
+# 【V1】版本拆分（人工裁决 SPLIT）: CONTRACTS_VERSION = 整模块版本，0.3.1 → 0.4.0；
+#    新增 GOLD_CHUNK_MAP_SEMANTICS_VERSION = "0.3.1" 作为 GoldChunkMap 兼容判定依据；
+#    GoldChunkMap 新增末位可选字段 gold_chunk_map_semantics_version（None 时序列化省略）；
+#    拆分前 schema 的映射按 legacy 规则（GOLD_CHUNK_MAP_PRE_SPLIT_CONTRACTS_VERSIONS 闭集）解释。
+#    canonical GoldChunkMap 8cf9f3be… 字节不变、仍被接受。
+# 【B1】bm25_accumulate(): BM25 query token MULTISET（每次出现在贡献多重集中占一个元素）+ math.fsum 累加；
+#    只接受 list / tuple 形式的 analyzer 输出序列（人工裁决）。冻结的是数学多重性，
+#    不是 term_contribution 的调用次数 / 顺序（合法缓存允许，不得改变结果）。
+# 未改动: 全部数值常量 / Chunk / Citation / EvalItem / Hit 字段 / EvalItemResult / IndexManifest /
+#    pack_context / MatchLevel / 解析语义（GoldChunkMap 语义版本因此保持 0.3.1）。
 
 # ==============================================================================
 # 0.3.1 相对 0.3.0 的冻结改动记录（S6 contract follow-up，DECISIONS 2026-09-28 同名条目）

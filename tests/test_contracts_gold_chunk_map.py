@@ -1,4 +1,5 @@
-"""GoldChunkMap / MatchLevel 契约测试（contracts v0.3.1；v0.3.0 S6 clarification + v0.3.1 follow-up）。
+"""GoldChunkMap / MatchLevel 契约测试（contracts v0.4.0 / GoldChunkMap 语义 v0.3.1；v0.3.0 S6 clarification + v0.3.1 follow-up；
+0.4.0 版本拆分见 tests/test_contracts_gold_chunk_map_versioning.py）。
 
 两部分:
   1. 契约边界: core.contracts 自己负责的东西 —— 版本、字段、文件名、identity helper、
@@ -219,7 +220,8 @@ class TestOrderInvariance(unittest.TestCase):
 class TestContractConstants(unittest.TestCase):
 
     def test_version(self):
-        self.assertEqual(contracts.CONTRACTS_VERSION, "0.3.1")
+        self.assertEqual(contracts.CONTRACTS_VERSION, "0.4.0")
+        self.assertEqual(contracts.GOLD_CHUNK_MAP_SEMANTICS_VERSION, "0.3.1")
 
     def test_match_level_enum(self):
         self.assertEqual(contracts.MatchLevel.__args__, ("L1", "L2", "AMBIGUOUS", "L3", "L4", "FAIL"))
@@ -294,7 +296,7 @@ class TestGoldChunkMapFields(unittest.TestCase):
         names = [f.name for f in dataclasses.fields(GoldChunkMap)]
         self.assertEqual(names, ["testset_version", "testset_sha256", "corpus_chunks_sha256",
                                  "corpus_builder_name", "construction_rules_sha256", "chunker_config",
-                                 "contracts_version", "mapping"])
+                                 "contracts_version", "mapping", "gold_chunk_map_semantics_version"])
         self.assertNotIn("built_at", names)
         self.assertNotIn("parser_name", names)
 
@@ -354,6 +356,7 @@ def make_map(**overrides) -> GoldChunkMap:
         chunker_config=builder_identity.effective_chunker_config_identity(),
         contracts_version=contracts.CONTRACTS_VERSION,
         mapping={"Q1": ["D:p1:0", "D:p1:1", "D:p2:1"], "Q2": ["D:p2:0"]},
+        gold_chunk_map_semantics_version=contracts.GOLD_CHUNK_MAP_SEMANTICS_VERSION,
     )
     base.update(overrides)
     return GoldChunkMap(**base)
@@ -457,9 +460,11 @@ class TestValidateGoldChunkMap(unittest.TestCase):
         self.assertRejected(make_map(
             construction_rules_sha256=one_char_changed(builder_identity.construction_rules_identity())))
 
-    def test_t6_previous_contracts_version_rejected(self):
-        self.assertEqual(contracts.CONTRACTS_VERSION, "0.3.1")
-        self.assertRejected(make_map(contracts_version="0.3.0"))
+    def test_t6_previous_semantics_version_rejected(self):
+        """0.4.0 起兼容判定看 GoldChunkMap 语义版本，不看整模块 contracts_version（拆分见 versioning 测试）。"""
+        self.assertEqual(contracts.GOLD_CHUNK_MAP_SEMANTICS_VERSION, "0.3.1")
+        self.assertRejected(make_map(gold_chunk_map_semantics_version="0.3.0"))
+        self.assertRejected(make_map(contracts_version="0.3.0", gold_chunk_map_semantics_version=None))
 
     def test_t7_corpus_sha_mismatch_rejected(self):
         self.assertRejected(make_map(), corpus_sha=OTHER_SHA)

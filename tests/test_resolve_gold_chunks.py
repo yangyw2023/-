@@ -1,4 +1,4 @@
-"""scripts/resolve_gold_chunks.py（contracts v0.3.1）的测试。
+"""scripts/resolve_gold_chunks.py（contracts v0.4.0 / GoldChunkMap 语义 v0.3.1）的测试。
 
 解析语义: 复用 tests.test_contracts_gold_chunk_map.GOLD_RESOLUTION_VECTORS（契约轮冻结的规范性向量），
 resolver 必须对同一组向量给出相同的 (level, formal)。其余测试用合成语料/评测集夹具端到端跑 run()。
@@ -289,6 +289,7 @@ class TestResolvedRun(FixtureCase):
         self.assertEqual(self.map["construction_rules_sha256"], bi.construction_rules_identity())
         self.assertEqual(self.map["chunker_config"], bi.effective_chunker_config_identity())
         self.assertEqual(self.map["contracts_version"], contracts.CONTRACTS_VERSION)
+        self.assertEqual(self.map["gold_chunk_map_semantics_version"], contracts.GOLD_CHUNK_MAP_SEMANTICS_VERSION)
         self.assertNotIn("built_at", self.map)
 
     def test_t4_exact_citation_page_only(self):
