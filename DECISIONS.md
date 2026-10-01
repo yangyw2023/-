@@ -3152,3 +3152,724 @@ Run A / Run B 与独立审计的原始日志位于执行会话的 scratch 目录
   本条 durability 决定之后，这些描述性措辞与现状不一致。本轮不修改 contracts；
   是否及如何更新措辞，由人工在契约轮次裁决。
 - `.gitignore` 顶部注释"唯一例外：eval/testset_*.jsonl …"未随本决定更新（不在本轮修改范围内）。
+
+
+## 2026-10-01 · S8 / M1c retrieval protocol：人工裁决落地（apply for review）
+
+证据标记沿用：`CONTRACT_FACT` / `CODE_FACT` / `MEASURED` / `DERIVED` / `DOCUMENTED_ONLY` / `HISTORICAL` / `NOT_VERIFIED`。
+作用域：HEAD `d28d130de33ec4abf79b67cff12dfd9e33b885be`；corpus `c8978777…` / 3409；testset `05614407…` / 39；
+canonical GoldChunkMap `8cf9f3be…`、report `f48018cb…`；`CONTRACTS_VERSION = 0.3.1`。
+依据：同日只读 S8 protocol closure（会话内）+ 人工逐项裁决 D1–D15。裁决归 Arya；本条目由 AI 按裁决机械落地，待人工审核 diff。
+
+### [L2] D1 · 固定-k 多 gold 指标
+
+- owner_experiment: S8 / M1c
+- 事实（`MEASURED`，canonical map + report.csv）：answer 31 / refuse 8；|gold| 分布 1:21 / 2:7 / 3:1 / 4:1 / 5:1（多 gold 10 题）；
+  Σ|gold| = 47；citation 38 条，L1 30 / L2 8。
+- **决策：GoldChunkMap mapping 不变。固定-k 至少报告三个不同的量：**
+  - `ANY_GOLD@k` = 1 iff top_k ∩ gold(q) ≠ ∅ —— navigation / candidate retrieval 是否至少触达一份 formal gold evidence。
+  - `GOLD_COVERAGE@k` = |top_k ∩ gold(q)| / |gold(q)| —— 主 aggregate 为 31 道可答题的 macro 平均；micro（47 个 题目–chunk 对）只作诊断。
+  - `ALL_MAPPED_GOLD@k` = 1 iff gold(q) ⊆ top_k —— **严格诊断量**。
+- **决策：`ALL_MAPPED_GOLD` 当前不得命名或宣称为 EVIDENCE_COMPLETE / ANSWER_COMPLETE / COMPLETE_EVIDENCE。**
+  依据（`CONTRACT_FACT`）：GoldChunkMap 冻结的是 citation → chunk 投影；EvalItem schema 没有字段表达同一道题多条 citation 之间的逻辑关系。
+  single-citation L2 的 cover 内 chunk 共同构成该 citation 的完整 formal cover —— 这**不**推出同题多条 citation 之间为 AND。
+- 关闭范围：本条部分关闭 2026-09-25 `RECALL_MULTI_GOLD_SEMANTICS = DOWNSTREAM_CONTRACT_GAP`（固定-k 报告口径已定）；
+  answer-level complete-evidence 语义仍开放，见下一条。
+
+### [L2] D1-A · multi-citation logic 只读 probe
+
+- owner_experiment: S8 / M1c（关闭需人工标注）
+- 输入（只读）：`eval/testset_v5_3.jsonl` 各题 question / required_elements / acceptable_elements / gold_answer / rationale；
+  report.csv `fragment_matches_json`；canonical chunk 正文。testset 未修改。
+- 下列 heuristic 只作待验证假设，**未直接采用**："不同 citation 支撑不同 required_element → AND"、"相同 required_element → OR"。
+- 结果（evidence 类型 = `DERIVED(人工撰写的 testset 文本)`；不是 schema 字段，不写回 testset）：
+
+  | qid | citation 数 | 推断的 citation 角色 | 依据（locator：testset 该题对应字段） | 强度 |
+  |---|---|---|---|---|
+  | CD01 | 3 | #0 SMM p73 ∧ #1 ERM p105 为必需；#2 SMM p74 只支撑 acceptable | required_elements 逐项带 "(SMM)" / "(ERM)"；rationale "两半各属一册、缺一不可"；acceptable "EEBD … (SMM p74)" | 强 |
+  | CD02 | 2 | #0 ∧ #1 均必需 | required_elements "QMM: …" / "EMM (EMS): …"；rationale "两数不同、各属一册" | 强 |
+  | CD03 | 2 | #0 ∧ #1 均必需 | rationale "'Master 是 PTW 批准权人'全库只在 SMM"；另两项 required 与 FMM p38 片段逐字对应 | 强 |
+  | FL07 | 2 | #0 p32 必需；#1 p34 只支撑 acceptable | rationale "评分只保留 BAC 0 / 40mg% 两项为必需"；acceptable "17.5 µg/L (p32) OR 19 µg/100ml (p34) — SOURCE CONFLICT" | 强 |
+  | FL06 | 2 | #0 p33 表格必需；#1 p34 为佐证 | question "Per QMM's Drug & Alcohol Testing Requirements table"；rationale "以 QMM p34 的'6-monthly'交叉核实"；`MEASURED`：required 元素 "(c) … at random" 中的 random 字样在 `QMM:p33:2` 正文内，但不在 #0 的 quote 片段里，只出现在 #1 的 quote 中 | 中 |
+  | CN03 | 2 | **未解出** | 两项 required 只出现在 ERM p14（`MEASURED`：`ERM:p14:0` 含 "overall management" / "main contact"，`QMM:p46:1` 不含）；但 rationale "使模型无论检索到哪一处…都不被判 0" 表达 OR 意图 —— 两处人工文本冲突 | — |
+
+- **决策：`REQUIRED_ELEMENTS_SUFFICIENT_TO_INFER_CITATION_LOGIC = PARTIAL`；`MULTI_CITATION_LOGIC_GAP = PARTIAL`。**
+  可推出 5/6（CD01 / CD02 / CD03 / FL07 / FL06），但多数还需 rationale / question / acceptable_elements，只靠 required_elements 不够；
+  CN03 = `NEEDS_HUMAN_ANNOTATION`。上述推断在人工确认前不得作为 metric 定义的输入。
+- 推论（`DERIVED`）：citation 之间的关系不只有 AND / OR，还有"仅佐证 / 只支撑 acceptable"。FL06 / FL07 / CD01 的 mapping 含这类非必需 citation 的
+  chunk（`QMM:p34:0` / `QMM:p34:2` / `SMM:p74:0`）→ 对这三题，`ALL_MAPPED_GOLD` 比 required-element 层面的完整证据更严。这进一步支持 D1 的命名限制。
+- 边界：本 gap 不阻塞 BM25 fixed-k baseline；在把任何 ALL 型指标宣称为 answer-level complete-evidence primary metric 之前必须关闭
+  （需人工逐 citation 标注角色；是否把角色写进 EvalItem schema 另行裁决）。
+- falsified_if: 人工复核给出与上表任一推断不同的 citation 角色。
+- 另记（不改 testset）：CN03 的 rationale "无论检索到哪一处都不被判 0" 与 §14.3 判分规则（Partial 需命中 ≥ 60% required_elements）
+  在只检索到 QMM p46 时不一致。
+
+### [L2] D2 · evaluation k
+
+- owner_experiment: S8 / M1c
+- **决策：`RETRIEVAL_K_MAX = TOP_K_RETRIEVE = 20`；`EVAL_RECALL_K_SET = (1, 2, 3, 5, 20)`；保存完整 top-20 ranking。**
+- **决策：`PACKING_REALIZED_K` 是 pack_context 的逐题输出，不是 evaluation cutoff。**
+- **决策：HISTORICAL "306 tokens/chunk"（2026-09-25 已标 `NOT_VERIFIED`）不得再用于推导 evaluation k。**
+- 依据：2 / 3 是 `_s4a9c_final_canonical_windows.csv` 两种打包场景下 realized k 的众数区间（`MEASURED`；按语料顺序的连续窗口，不是检索窗口）；
+  1 / 2 兑现 2026-09-08 [L1] 预先声明；5 = `TOP_K_CONTEXT`；20 = `TOP_K_RETRIEVE`。
+- **决策：`RERANKER_OBSERVATION_K = (2, 3)`；`RERANKER_DECISION_THRESHOLD = NOT_YET_FROZEN`。**
+  不得现在把 @2 固化为最终 reranker gate；真实 retrieval-window measurement 完成后再裁。
+
+### [L1] D3 / D15 · fixed-k retrieval 与 packed context 的依赖收窄
+
+- falsified_if: S8 fixed-k 的实现被证明读取了 MAX_PROMPT_TOKENS / PROMPT_OVERHEAD_RESERVE_TOKENS / CONTEXT_PACK_MARGIN /
+  CONTEXT_PACK_BUDGET_TOKENS / TOP_K_CONTEXT / pack_context 中任一项；或数值契约决定改变了 canonical chunking，而 S8 结果未随之失效。
+- 冲突（不按日期裁）：旧记录 2026-09-08（"S4a.9 必须在 S8 前完成"、"9d → `contract:` commit → 解锁 S8"、"再冻结 S8 的主 k 值"）
+  及 contracts.py `PROMPT_OVERHEAD_RESERVE_TOKENS` 注释；新记录 2026-09-25（token-contract line 需要 real retrieval evidence）。两者合读成环。
+- 依赖证据（`CONTRACT_FACT` + `DERIVED`；retriever / eval 代码尚不存在，`CODE_FACT`）：fixed-k 指标只读 corpus、question、retriever protocol、
+  TOP_K_RETRIEVE、GoldChunkMap；pack_context 读 CONTEXT_PACK_BUDGET_TOKENS（← 1050 / 200 / 0.90）、TOP_K_CONTEXT、
+  est_prompt_tokens（← CHARS_PER_TOKEN_EST、CITATION_HEADER_EST_TOKENS）。
+- **决策：`FIXED_K_RETRIEVAL_BASELINE` 不读取 MAX_PROMPT_TOKENS / PROMPT_OVERHEAD_RESERVE_TOKENS / CONTEXT_PACK_MARGIN /
+  CONTEXT_PACK_BUDGET_TOKENS / TOP_K_CONTEXT / pack_context → 不被 numeric token-contract decision 阻塞。**
+- **条件失效：`CHARS_PER_TOKEN_EST` 同时参与 canonical chunk construction（2026-09-28 [L1]）。** 若未来修改它并改变 canonical chunking
+  → corpus、GoldChunkMap、fixed-k S8 结果全部失效。
+- **决策：`PACKED_CONTEXT_MEASUREMENT` 读取当前 executable packing contract，是 numeric token-contract decision 的 evidence，
+  不得反向阻塞 fixed-k baseline。**
+- **决策：`S8_BLOCKED_BY_NUMERIC_TOKEN_CONTRACT = PARTIAL`** —— fixed-k baseline = NO；current-contract packed measurement = NO；
+  final-budget packed conclusion = YES。
+- **顺序：S8 fixed-k BM25 baseline 可先于 numeric token-contract final decision；real retrieval-window measurement 在 frozen S8 result 上运行，
+  为 numeric decision 提供 evidence；final packed-context conclusions 在 numeric contract freeze 后确认。不得恢复旧的循环依赖。**
+- 收窄（append-only，不回改）：2026-09-08 上述三处表述按本条收窄为只约束 packed 结论。contracts.py 对应叙述已同步修改（只改注释，数值常量未动）。
+
+### [L2] D3-A · TTFT 10 s 的业务需求状态
+
+- owner_experiment: numeric token-contract decision / M6（目标硬件实测）
+- 事实：现有材料描述"船员使用、离线、CPU-only、无 IT 支持"，但**没有冻结**具体使用场景、紧急程度、可接受等待时间、TTFT SLA、
+  end-to-end latency SLA。`TTFT_BUDGET_S = 10.0` 在 contracts 中是 [L2]（owner M6）。
+- **决策：`TTFT_BUDGET_10S_STATUS = BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED`。** 10 s 不得描述为已确认的业务硬需求、船员硬 SLA，
+  或经用户研究确认的 production requirement。
+- **决策（人工方向）：`PERFORMANCE_QUALITY_PRIORITY = QUALITY_SPEED_TRADEOFF`。** 若更长上下文显著改善质量，可以接受明显高于 10 s 的响应时间。
+- **决策：`MAX_ACCEPTABLE_TTFT_EXPLORATION_CEILING = 180 seconds`。** 它只是后续 trade-off analysis 的最大探索上限；
+  不是 target TTFT、recommended TTFT、executable contract、production SLA，也不是 MAX_PROMPT_TOKENS 的直接换算依据。
+- **禁止：用开发机 measured prefill rate（tokens/sec）× 180 推出船端 MAX_PROMPT_TOKENS。** 开发机测量作用域 ≠ 船端 x86 production hardware
+  （2026-09-25 [L1] token budget 校准目标设备）。任何此类换算必须标 `DERIVED(<source evidence scope>)`，不得升级为 production fact；
+  在同时获得 production hardware measurement 与 concrete use-case requirement 之前，不得换算成 MAX_PROMPT_TOKENS。
+- 未来 numeric token-contract decision 的目标：在 TTFT ≤ 180 s 的探索范围内，比较 retrieval evidence coverage、packed gold coverage、
+  answer quality、TTFT、end-to-end latency 的 trade-off / Pareto frontier，选择合理的 operating point —— **不是最大化 prompt size，
+  也不是尽量接近 180 s**。若较低延迟已获得绝大多数质量收益，不得因 ceiling 是 180 s 而继续扩大 prompt。
+- 本条不修改任何数值常量。
+
+### [L2] D3-B · S8 结果对未来预算的可复用性
+
+- owner_experiment: S8 / numeric token-contract decision
+- **决策：S8 normative result 必须保存完整 top-20 ranking、score semantics、corpus / map / testset identity**，使不同 packing budget 下的
+  realized k、packed ANY / coverage / ALL_MAPPED_GOLD、overbudget、actual token cost 都能在 frozen S8 result 上重新模拟，**无需重跑 retrieval**。
+- **决策：未来 TTFT / token budget 调整不构成重跑 fixed-k retrieval 的理由**，除非 corpus identity、retrieval protocol 或 model / index identity 本身变化。
+
+### [L2] D4 · query construction
+
+- owner_experiment: S8
+- **决策：query = `EvalItem.question` 原始字符串。** retrieval orchestration 层不翻译、不 LLM rewrite、不做 metadata augmentation、
+  不把整个 EvalItem 作为 query 输入。
+- **决策：Unicode / case / token normalization 属于各 retriever 的 analyzer / embedder protocol，对 query 与 document 对称应用。**
+- 事实（`MEASURED`）：39/39 题 NFC 稳定、空白规整；NFKC 只会改变 ML01 的全角标点；ML01 没有 ASCII 词元；canonical corpus 无 CJK / 天城文 chunk。
+
+### [M] D4 · gold leakage policy
+
+- why_not_falsifiable: 评测信息不得进入检索，是实验有效性的方法要求，不是关于本系统的经验主张。
+- **决策：下列字段不得用于 query / filter / boost / routing / tie-break / dynamic k：** expected、type、language、citations/*、GoldChunkMap、
+  report.csv、gold ids、required_elements、acceptable_elements、gold_answer / answer_key、known_distractor、trap_subtype、
+  exclude_from_primary_score、pair_id、safety_critical / at_risk、rationale、source_boundary_ambiguity。
+- question_id 只能在排序完成后作为 join key。
+
+### [L2] D5 · indexed content
+
+- owner_experiment: M5（metadata augmentation 消融）
+- **决策：BM25 = `chunk.text` only；Vector = `chunk.text` only。section / doc / page / citation header 不进入 baseline retrieval representation；
+  metadata augmentation 只作 future M5 ablation。**
+- 依据（`MEASURED`）：6/31 道可答题在问题里点名手册或章节（FL06 / FL10 / FL15 / PR02 / PR04 / CD02），metadata 进索引会给这 6 题可预先识别的人为优势。
+
+### [M] D6 · retrieval total order
+
+- why_not_falsifiable: 同输入同输出与"tie-break 不读评测信息"是可复现性与实验有效性的方法要求。
+- **决策：全序 = (−ranking_score, corpus_ordinal)；tie-break 只在 primary score 完全相同时生效；禁止 chunk_id 字典序与 doc/page 排序。**
+  BM25 ranking score = raw BM25 score；vector = raw cosine；RRF 用确定性精确表示，不得因浮点累加顺序产生不确定 tie。
+- 事实（`MEASURED`）：canonical corpus 有 52 组文本完全相同的 chunk（共 112 个），只看文本的打分器必然在这里产生精确 tie；39 个 gold chunk 不在其中。
+- 落地：`core/contracts.py` 的 `Retriever.search` 契约 + `retrieval_order_key()`（见本日 contracts 条目）。
+
+### [M] D7 · score semantics
+
+- why_not_falsifiable: 持久化分数必须可区分、可归因，是审计方法要求。
+- **决策：RAW_SCORE / RELEVANCE / MATCH_SCORE 三个字段分开，各带 raw_score_kind / relevance_kind / match_score_kind；不得只输出含义不明的 `score`。
+  S8 normative artifact 必须保存足够信息，使 S9 不重跑 retrieval 即可重新分析。**
+- **决策：`S9_CALIBRATION_SEMANTICS = DEFERRED`。** 本轮不裁"gold chunk 分数分布"与"all-hit max(match_score) 分布"哪一个是
+  MIN_RELEVANCE 的最终校准 population（张力：contracts.py MIN_RELEVANCE 注释的目标句写 gold chunk 分数，判定式写 max over hits）。
+
+### [L2] D8 · answer / trap
+
+- owner_experiment: S8 / S9
+- 事实（`MEASURED`，v5.3）：answer 31 / refuse 8（全部 type=trap）；absent_with_distractor 5（TR01 / 03 / 04 / 07 / 08）、
+  absent_no_hit 3（TR02 / 05 / 06）；exclude_from_primary_score 只有 TR02 → "7 道计分陷阱 + 1 道排除"已确认。
+- **决策：`ANSWER_RECALL_DENOMINATOR = 31`；8 道 refuse / trap 全部运行 retrieval；TR02 executed = YES、exclude_from_primary_score = YES；
+  `PRIMARY_TRAP_DENOMINATOR = 7`；陷阱题逐题展示，不报百分比式强结论。**
+- 至少保存：top-20 ranking、raw_score、relevance、match_score、max_match_score、top-1 document、BM25 empty-result flag。
+- **决策：known_distractor rank 暂不定义**（`MEASURED`：known_distractor.source 是自由文本，页码口径混用）。
+
+### [L2] D9 · multilingual
+
+- owner_experiment: S8 / GATE-E3（证据）
+- 事实（`MEASURED`）：en 36（answer 28 + refuse 8）、zh / tl / hi 各 1；pair gold：FL01↔ML01 相同、FL12↔ML03 相同、FL06（4）⊋ ML02（2）。
+- **决策：overall answer metrics 用 31 题（含 multilingual）；English breakout 用 28 题；zh / tl / hi 逐题报告，不对 n=3 做百分比式强推断；
+  pair_id 只做描述性比较；pair gold 不同（P-drug-freq）必须显式标注，不得直接等价比较。**
+
+### [L2] D10 · S8 result artifact
+
+- owner_experiment: S8
+- **决策：不复用 EvalItemResult / `eval/results.csv`**（`CODE_FACT`：多个必填字段对纯检索无意义；`retrieval_scores` 是一列没有 kind 的数字；
+  results.csv 是 M2 McNemar 的只追加输入）。
+- **决策：建立独立的 S8 retrieval-result schema；normative artifact = deterministic JSONL**（UTF-8、ensure_ascii=False、固定字段顺序、
+  separators=(",",":")）；**哈希的 normative artifact 内不放 wall-clock timestamp、不放 latency**；latency 只进 audit sidecar。
+- Run identity 至少：schema_version、contracts_version、corpus_chunks_sha256、gold_chunk_map_sha256、testset_sha256、retrieval_variant、
+  retrieval_config_digest、query_protocol_digest、metric_protocol_digest、total_order_protocol_digest、runtime identity；
+  vector / hybrid 另加 embedder model/tag、model blob digest、embedding dimension、embedding protocol digest、embeddings artifact sha。
+- per-question 至少：question_id、expected、type、language、gold_count、ranked hits ≤ 20（每个 hit：chunk_id、corpus_ordinal、raw_score、
+  raw_score_kind、relevance、relevance_kind、match_score、match_score_kind），另存 max_match_score、first_gold_rank、gold_ranks、BM25 empty-result flag。
+- metric 值尽量由纯函数从 normative artifact 重算；可派生的 aggregate 不作唯一事实来源。
+  Audit / report CSV：per-k ANY_GOLD、GOLD_COVERAGE、ALL_MAPPED_GOLD、structural-unreachable flag、latency、diagnostics。
+- 本轮 schema 不进 contracts.py：各 *_digest 的计算方式尚未裁决（见本日"留待人工确认的空白"）。
+
+### [L2] D11 · BM25 baseline protocol
+
+- owner_experiment: S8（baseline）/ M5（任何调参）
+- **决策（人工接受）：** indexed text = `chunk.text` only；analyzer = NFC → casefold → Unicode 字母 / 数字 / combining marks 的最长连续串，
+  query 与 document 对称；不用 stopwords、不做 stemming；数字保留；CJK 在 baseline 不做专门 segmentation（canonical corpus 无 CJK chunk；
+  multilingual limitation 必须在报告中显式记录）；IDF = ln(1 + (N − n + 0.5) / (n + 0.5))，必须 ≥ 0；
+  k1 = 1.2、b = 0.75 为 preregistered baseline default，不得在 v5.3 上调参；只返回 raw BM25 score > 0；不需要 persistent index artifact；
+  BM25_SCORE_SATURATION 不参与 BM25 单路 ranking，只用于 score normalization 与 match_score semantics。
+- **决策：`BM25_BASELINE_PROTOCOL_READY = YES`。**
+- 落地：IDF 非负（s ≥ 0）作为长期不变量进入 contracts（`bm25_match_score()`）；analyzer regex、IDF 公式、k1 / b 属预注册，不进 contracts。
+
+### [L2] D12 · vector
+
+- owner_experiment: EMBEDDING_PROTOCOL_PROBE（单独一轮）
+- 事实（`MEASURED`，只读文件）：bge-m3 manifest sha256 `7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab`；
+  model blob 重算 sha256 = `daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c`（= 文件名 = models.yaml digest）；
+  GGUF v3、bert、embedding_length 1024、context_length 8192、pooling_type 2、F16。
+  runtime：`ollama --version` 显示 server 0.34.0 / client 0.23.1，与 models.yaml `rt-2026-09-08` 的 0.33.3 不同。
+- **决策：`MODEL_FILE_IDENTITY` 已测量存在；`MODEL_SELECTION_STATUS = NOT_FROZEN`；`EMBEDDING_PROTOCOL_IDENTITY = NOT_FROZEN`；
+  `VECTOR_BASELINE_READY = NO`。**
+- 下一步（单独一轮）：`EMBEDDING_PROTOCOL_PROBE` 至少测 endpoint、normalization、prefix、single vs batch equality、Run A/B determinism、
+  runtime identity、CPU path、output dimension，并人工记录 model-selection decision。本轮不生成 formal embeddings artifact。
+
+### [L2] D13 · hybrid
+
+- owner_experiment: S8（baseline）/ M5（融合权重）
+- **决策：baseline 不扫融合权重；方向 = unweighted RRF。RRF constant、per-route fusion depth、embedding dependency 尚未完全冻结
+  → `HYBRID_BASELINE_READY = NO`；vector protocol closure 后再最终冻结。**
+- **决策：任何 weight sweep 只作 exploratory，不得用于在同一 v5.3 上选择 M2 production configuration。**
+- 已知叙述冲突（本轮未改，`CONTRACT_NARRATIVE_FOLLOWUP`）：contracts.py Hit docstring "融合权重是 L2 参数（M1c 要扫）"
+  与边界声明 §5 "是 M1c/M5 要扫的对象" 与本条不一致。
+
+### [L2] D14 · IndexManifest
+
+- owner_experiment: 后续单独 contract round
+- **决策：`INDEX_MANIFEST_CONTRACT_GAP = YES`；本轮不修 IndexManifest；S8 run artifact 自己记录完整 identity。**
+- 缺口（`CONTRACT_FACT`）：没有 corpus_builder_name（仍是 parser_name）、construction_rules_sha256、embedder digest、
+  embedding protocol identity、BM25 protocol / artifact identity；`built_at` 是墙钟时间。
+- `INDEXMANIFEST_CONTRACT_FOLLOWUP`：IndexManifest.chunker_config 示例 `"target350_overlap60_min120"` 与 2026-09-25 [L3]"不得再写"
+  及权威 builder identity 的格式不一致；本轮只登记，不改。
+
+### [L3] 更正：CD01 "3 chunks"
+
+- 事实（`MEASURED`，canonical GoldChunkMap `8cf9f3be…`）：CD01 = **5 chunks / 3 citations**（SMM p73 {0,1} L2；ERM p105 {0,1} L2；
+  SMM p74 {0} L1），跨 2 份手册。
+- 事实："3 chunks" 出现于本文件 2026-09-08 "M2 主模型选定"条目、contracts.py `TOP_K_CONTEXT` 注释、执行手册 S3 表与 S8.4、实施方案 §10.2。
+  写下时评测集 gold_chunk_ids 为 39/39 空（实施方案 §14.3），因此 "3 chunks" **从未由 canonical GoldChunkMap 实测支持**（起源 `NOT_VERIFIED`）。
+- 推论（`DERIVED`；输入：contracts.pack_context 代码 + canonical chunk 的 est_prompt_tokens + canonical map）：即使 gold 以最优顺序排在最前，
+  CD01 的 5 个 gold chunk 合计 est_prompt_tokens 1386 > 765，在当前可执行预算下不可能全部打包。
+- **更正：以 5 chunks / 3 citations 为准。** 2026-09-08 M2 主模型选定的理由 ① 部分以 "3 chunk" 为前提；另外两条独立理由不受影响；本更正不重开模型选型。
+- 落地：contracts.py 注释与执行手册 S8.4（当前 S8 指令）已改；执行手册 S3 表、实施方案 §10.2 只登记，未改。
+
+### [L3] LOG_INTEGRITY_DEFECT：commit 18f556e
+
+- 事实（`CODE_FACT`）：commit `18f556eb798282ac620881785943df23f777e09e` 的 message 为
+  "contract: 用 phi4-mini 实测校准 MAX_PROMPT_TOKENS 与 PROMPT_OVERHEAD_RESERVE_TOKENS；修正 CONTEXT_PACK_MARGIN 使安全不等式成立"，
+  但 diff 只有 5 个文件（`experiments/gate2_raw/_s4a9a_prompt_overhead.log`、`_s4a9b_ttft_sweep.log`、`_s4a9c_chars_per_token.log`、
+  `prompts/system_ac_draft.txt`、`prompts/system_bd_draft.txt`）；`core/contracts.py` 未改（`git log -- core/contracts.py` 不含该 commit）。
+- **决策：`LOG_INTEGRITY_DEFECT = CONFIRMED`。不改 git history。**
+- 明确：`950 / 206 / 0.86 / 639` 是 experimental / historical candidate，不是 executable contract；
+  executable contract 仍是 `1050 / 200 / 0.90 / 765`（与 2026-09-22 "executable budget contract 与 S4a.9 候选值必须分离" 一致）。
+
+### [L3] 更正：GoldChunkMap 的 Git 状态叙述
+
+- 事实：2026-09-28 决定 `GOLD_CHUNK_MAP_DURABILITY_POLICY = TRACK_CANONICAL_MAP_AND_REPORT_IN_GIT`；canonical map / report 已入 Git（`7176505`）。
+- 更正：2026-09-25 [M]"GoldChunkMap 确定性：删除 built_at" 的 why_not_falsifiable 写 "GoldChunkMap 不进 Git" —— 该前提已被 2026-09-28 决定取代；
+  该条目的决策（删除 built_at、逐字节可再生）不变。
+- 落地：contracts.py GoldChunkMap docstring 两处 "不进 Git" 叙述已改为 "派生、可再生，canonical 映射已冻结入 Git"；schema 与校验未改。
+  关闭 2026-09-28 登记的 contracts 措辞 followup；`.gitignore` 顶部注释仍未改。
+
+### [L3] 更正：3309 chunks
+
+- 事实（`MEASURED`）：canonical corpus = 3409；3309 不属于已记录的三代语料（3383 / 3413 / 3409）。
+- 落地：contracts.py 边界声明 §6 的当前性陈述改为 3409（≈ 14 MB，结论不变）。实施方案 / DOCUMENT_MAP / 执行手册中的 3309 只登记，未改。
+
+### [L3] contracts.py 本轮改动（待人工审核 diff）
+
+- 改动（全部是 0.3.1 版本内追加，`CONTRACTS_VERSION` 未递增）：
+  - R1 `Retriever.search` 确定性全序 + `retrieval_order_key()`；
+  - R2 `Hit` 写明 RAW_SCORE / RELEVANCE / MATCH_SCORE 的区分与持久化 kind 要求；
+  - R3 BM25 原始分 s ≥ 0（IDF 非负）前提不变量 + `bm25_match_score()`；
+  - R4 叙述更正：CD01、GoldChunkMap 的 Git 状态与多 citation 逻辑、3309、PROMPT_OVERHEAD_RESERVE_TOKENS 的 S8 顺序。
+- 未改：全部数值常量、Chunk / Citation / EvalItem / GoldChunkMap schema 与校验 / EvalItemResult / IndexManifest / pack_context / MatchLevel。
+- 测试（`MEASURED`）：新增 `tests/test_contracts_retrieval.py`（18 个）；5 个测试模块共 176 个 OK；变异检查 —— 去掉行序 tie-break、
+  行序降序、接受负 s、常数 1.0 映射 —— 4 个变体都被拦下。canonical GoldChunkMap 在改后的 contracts 下仍通过 `validate_gold_chunk_map`，序列化逐字节一致。
+- **待人工裁决：`CONTRACTS_VERSION` 是否递增。** 现行规则只要求 Chunk 结构或引用语义改变时递增；若递增，contracts_version="0.3.1"
+  的 canonical GoldChunkMap 将无法通过 `validate_gold_chunk_map`（需要新的 data commit 再生）。本轮未递增。
+- 本轮未进入 contracts：S8 result schema（*_digest 定义未裁决）、EVAL_RECALL_K_SET、BM25 k1 / b / analyzer / IDF 公式、RRF constant / depth、
+  packed scenarios、reranker observation k、180 s ceiling、multilingual 报告布局。
+- 已知未处理的 contracts 叙述（只登记）："M1c 要扫融合权重"（Hit docstring、边界 §5）；Reranker docstring 判据 "Recall@k_context ≈ Recall@20"
+  （k_context 是逐题变量）；TOP_K_CONTEXT 注释中的 Recall@3 / @5 与 Recall@1 / @2 / @5 口径；MIN_RELEVANCE 目标句与判定式的 population 张力
+  （S9 deferred）；IndexManifest.chunker_config 示例。
+
+### [L3] 留待人工确认的空白（不阻塞本条目审核；阻塞 BM25 实现开工）
+
+- S8 prereg artifact 的路径：仓库有两种既有惯例 —— DOCUMENT_MAP 记载的 `experiments/M2_preregistration.md`（里程碑级，位于 experiments/ 根）
+  与实际使用的 `experiments/<line>/_<step>_prereg.txt`（测量线子目录）；两者都没有 M1c / S8 先例 → 本轮未创建，路径待人工指定。
+- 单路 relevance 的定义：D6 定了 ranking score，D11 定了 match_score；BM25 / vector 单路的 relevance（及 relevance_kind）尚未定义。
+- RAW_SCORE 与 corpus_ordinal 从 retriever 到 S8 artifact 的载体：Hit 当前不携带二者；需决定是扩展 Hit，还是另定接口。
+- corpus_ordinal 的基数（0-based / 1-based）。
+- 各 *_protocol_digest / retrieval_config_digest 的计算方式。
+
+### [L3] docs followup（本轮只登记）
+
+- 执行手册 S8.2：仍引用不在 HEAD 的 `ClaudeCode_任务序列_v4.md`「任务 4」。
+- 执行手册 S8.3：`CORPUS_SHA=$(shasum …)` 从被使用的文件自算（违反 2026-09-28 [L1] identity assertion 不得 self-derive）；`--k 1 2 3 20` 与 D2 不一致；
+  `--retrievers bm25 vector hybrid` 与 D12 / D13（vector / hybrid NOT_READY）不一致；306 推导块。
+- 执行手册 S8.4 / S8.5：Recall@1/2/3/20 清单、"cross_doc 按每份手册算"判据、"融合方式是模块顶部常量"、reranker 用 Recall@2 判 —— 与 D1 / D2 / D13 不一致。
+- 执行手册 S1.4：仍安装 lancedb "给 S8 用"；S3 表 CD01 "3 chunk"；S4a.9 状态块 "must rerun after Phase B"；S5c 标题 "阻塞 S6"。
+- 实施方案 §10.2（CD01 3 chunk、306）、§10.3（把 950 / 206 / 0.86 / 639 列为"当前值"）、§15.2 / §9（3309）；DOCUMENT_MAP（3309、任务序列 v4）。
+
+
+## 2026-10-01 · S8 / M1c protocol apply blocker closure（apply for review）
+
+证据标记沿用上一条目。作用域：HEAD `d28d130de33ec4abf79b67cff12dfd9e33b885be`（== origin/ship-rag，0 / 0）；
+上一条目留下的候选 diff（DECISIONS.md / core/contracts.py / 执行手册_v4.md + 未跟踪 tests/test_contracts_retrieval.py）为本轮基线。
+依据：人工裁决 A（prereg 路径）/ B（corpus_ordinal）/ C（BM25 relevance）/ D（Hit 不改、独立 record）/ E（TTFT，本轮不改）。
+本条目由 AI 按裁决机械落地并记录审计，待人工审核 diff。上一条目的文字未改动；其"留待人工确认的空白"由本条目逐项关闭或改记。
+
+### [L3] 输入身份复核
+
+- `MEASURED`（EXPECTED 取 2026-09-28 Formal S6 条目字面量，ACTUAL 只用于比较）：corpus `c8978777…` / 3409 行；testset `05614407…` / 39 行；
+  map `8cf9f3be…`；report `f48018cb…`；page_quality `69842896…` / 1335；builder `kaiva_phase_b_builder_v1` / `e89e6f94…` /
+  `chars_per_token_est=4;chunk_min_chars=120;chunk_target_tokens=350` —— 全部相等；`validate_gold_chunk_map` PASS，重序列化逐字节相等。
+  `INPUT_IDENTITY_DRIFT = NO`。token 数值常量只读：1050 / 200 / 0.90 / 765 / 4 / 14 / 5 / 20 / 350 / 120 / 10.0 / 0.35 / 10.0（未改）。
+
+### [L3] CONTRACTS_VERSION 语义审计（只读；决策待人工）
+
+- 源与消费方（`CONTRACT_FACT` / `CODE_FACT`）：
+
+  | locator | 角色 | 比较语义 | 失效后果 |
+  |---|---|---|---|
+  | contracts.py `CONTRACTS_VERSION` 注释 | 自述"索引包与运行时的一致性校验依据（见 IndexManifest）"；递增条件"任何影响 Chunk 结构或引用语义的改动**都必须**递增"（必要条件，未说"只有"） | — | — |
+  | contracts.py 0.2.0 改动记录 P5 | "它会写进 IndexManifest → 索引包 → EvalItemResult → M2 预注册" | — | — |
+  | `IndexManifest.contracts_version` | 船端启动校验，"任一项不匹配 → IndexIntegrityError 拒绝启动"；约定 9 岸船共用同一份 contracts | 相等 | 整个索引包被拒（尚无实例） |
+  | `GoldChunkMap.contracts_version` 注释 / 0.2.0 P4 | "解析语义一变，旧映射即不能作为当前 canonical 映射" / "切片语义一变旧映射即作废" | — | — |
+  | `validate_gold_chunk_map` | `gold_map.contracts_version != CONTRACTS_VERSION` → ContractViolation | 严格相等 | canonical map 不可再作为当前映射 |
+  | `scripts/resolve_gold_chunks.py:327` | 写入 `contracts.CONTRACTS_VERSION` | 生产方 | — |
+  | `EvalItemResult` | **无** contracts_version 字段（P5 所说的 EvalItemResult 承载未实现；有 code_commit） | — | — |
+  | 其他 artifact（corpus、page_quality、OCR accepted、9c-final、experiments/*） | 不记录（0.3.0 / 0.3.1 失效复核已确认） | — | — |
+  | tests | `test_contracts_gold_chunk_map` 断言 =="0.3.1" 且拒绝 0.2.0 / 0.3.0 | 相等 | — |
+
+- 历史（`CODE_FACT`，`git show <commit>:core/contracts.py`）：ae33bc4 = 0.2.0-draft；a1973ef = 0.2.0；b866134 = 0.3.0；d30ed34 = 0.3.1。
+  **每个 contract commit 都递增且内容与版本一一对应**；0.2.0 的 P1（relevance / match_score 分离）本身就是检索语义改动，随该版递增。
+- 逐问：
+  1. 注释称追踪"索引包与运行时一致性"，递增条件写 Chunk 结构 / 引用语义 —— 二者口径不同。
+  2. GoldChunkMap 保存它，是为记录"由哪版解析语义生成"。
+  3. 是：严格相等，无兼容表。
+  4. 只改检索语义时，canonical map 的字节、corpus、testset、builder identity、解析语义都未变；按本项目既有失效判据
+     （2026-09-25：artifact 是否消费被改变的语义，而非是否出现旧版本号），map **不应**失效；但若递增，严格相等会使其机械失效 —— 判据与校验器冲突。
+  5. 是：IndexManifest 按"整模块 / 岸船一致"解释；GoldChunkMap 按"解析 / 切片语义"解释；EvalItemResult 不承载。
+  6. Git 历史内：**NO**。工作区：**YES** —— 当前候选 `core/contracts.py`（未提交，本轮前 `c14a791f…`）与 d30ed34（`b8560e7e…`）内容不同，
+     版本号同为 0.3.1；若原样提交，Git 内即出现 YES。
+- **结论：`CONTRACTS_VERSION_SEMANTIC_CLASS = C_MIXED_AMBIGUOUS`。**
+- 最小修复 proposal 与兼容性（均未实施）：
+  - **Option A（整模块版本）**：本轮递增（如 0.4.0）。兼容性：canonical map 的 `contracts_version="0.3.1"` 无法通过 `validate_gold_chunk_map`；
+    要么再生 map（字节仅 contracts_version 一处不同 → 新 sha，S6 canonical identity 改变，需新 data commit + DECISIONS），
+    要么同时采用 Option C。单独 A = 对一个未消费检索语义的 artifact 做虚假失效。
+  - **Option B（只追踪 chunk / citation 语义）**：保持 0.3.1，把注释改为该语义并为整模块另立 identity。兼容性：map 不受影响；
+    但与 IndexManifest 的岸船一致用途、约定 9、P5、以及 0.2.0 把检索语义改动计入版本的历史相悖；IndexManifest 需新增整模块字段（D14 缺口内）。
+  - **Option C（validator 绑定更窄的语义版本）**：CONTRACTS_VERSION 保持整模块含义并照常递增；GoldChunkMap 的接受判据改为绑定
+    "gold 解析语义版本"（新常量），或在 validator 中显式列出与当前解析语义兼容的 contracts 版本集合。兼容性：若保留字段名 `contracts_version`
+    并用兼容集合，map 字节与 sha 不变；若改字段名，map 需再生。代价：多一个须人工维护的语义版本 / 兼容表，以及 validator 语义变更。
+  - AI 倾向（仅供裁决参考）：A + C 的"兼容集合"变体 —— 整模块含义与历史、IndexManifest 一致，且不使冻结 map 失效。
+- **决策：`CONTRACT_VERSION_DECISION = BLOCKED`（待人工）。本轮未改版本号。**
+  对 S8 的影响：record 的 schema 不依赖版本号取值，可在当前版本下冻结；为防止"同版本号不同内容"污染 S8 证据，
+  prereg run identity 追加 `contracts_sha256` 与完整 `code_commit`。但本裁决必须在 protocol commit 之前给出，否则提交即造成问 6 的 Git 内 YES。
+
+### [M] corpus_ordinal（人工裁决 B 落地）
+
+- why_not_falsifiable: 行序基数是表示约定，不是关于系统的经验主张。
+- **决策：`corpus_ordinal` = canonical `corpus/chunks.jsonl` 中的 zero-based physical line ordinal（第一行 = 0）；不是 pdf_page、不是页内序号、
+  不是 chunk_id 字典序位置；只用于 deterministic tie-break 与 provenance / audit。**
+- 落地：`RetrievalResultRecord` docstring + `validate_retrieval_records` 校验 `corpus_chunk_ids[corpus_ordinal] == chunk_id`；
+  测试含真实 canonical corpus 首 / 末行（0 / 3408）与 1-based 漂移拒绝。
+
+### [L2] BM25 relevance（人工裁决 C 落地）
+
+- owner_experiment: S8（baseline）/ S9（校准）
+- **决策：BM25 baseline 的 raw_score = s；relevance = match_score = `bm25_match_score(s)`；ranking 只用 raw_score。数值相同、字段与 kind 分开。**
+- 落地：Hit.relevance docstring 增加 bm25 baseline 一行（vector / hybrid relevance 未冻结）。
+- 非 BM25 证明（`MEASURED`）：合成 RRF 向量（raw = 精确 Fraction，relevance = raw / (2/61)，match_score 为手写的各路 max 且与排名不单调）下，
+  记录、序列化、全序、"阈值面向 match_score"均成立；把 match_score 写进 relevance（互换）被 `validate_retrieval_records` 拦下。
+  变异检查：序列化把 relevance 写进 match_score、或把 match_score_kind 写进 relevance_kind —— 两个变体**只**被合成非 BM25 向量拦下，BM25 用例全部照常通过。
+
+### [L2] RetrievalResultRecord（人工裁决 D 落地）
+
+- owner_experiment: S8（及后续一切检索评测）
+- **决策：Hit 不改。新增独立逐 hit 载体 `RetrievalResultRecord`，放在 `core/contracts.py`。**
+  依据（ownership / reuse / dependency direction）：生产方是 `components/retrievers/*`，消费方是评测 runner（eval / experiments）；
+  依赖树规定 component 只能 import `core.contracts` —— 放在 eval/ 或实验 schema 则 retriever 无法 import，放在 components/retrievers/ 下
+  则 bm25 / vector / hybrid 无法共享同一定义（且 component 之间互不 import）。它是 executable cross-retriever interface。
+- 字段：chunk、chunk_id（chunk.id 的只读投影）、corpus_ordinal、raw_score（float 或 Fraction）、raw_score_kind、relevance、relevance_kind、
+  match_score、match_score_kind。不含 gold / eval 信息、latency、墙钟时间；rank = 序列位置，不存。
+- 产出接口：`Retriever.search_records(query, k)`，与 `search` 一一对应（同一次排序的两种投影）；序列校验 `validate_retrieval_records`；
+  序列化 `retrieval_record_json_object` / `serialize_retrieval_record`（字段顺序 `RETRIEVAL_RECORD_JSON_FIELDS`，Fraction → "p/q"）。
+- 边界：逐 hit record 进 contracts；S8 逐题行 schema、run identity、kind 取值词表留在 `experiments/M1c_preregistration.md`
+  （上一条目 D10 "schema 不进 contracts" 对后者仍成立）。
+- 待审核的形状选择（AI 提案）：方法名 / 签名 `search_records`；chunk_id 作为属性而非独立字段；relevance / match_score 只接受 float、raw_score 只接受 float / Fraction。
+
+### [M] Digest protocol
+
+- why_not_falsifiable: 规范字节与哈希算法是可复现性的方法要求。
+- 既有口径（`CODE_FACT`）：`ingest/builder_identity.construction_rules_identity`（ensure_ascii=False、无 sort_keys、payload 为有序 list）；
+  `components/parsers/ocr_artifact`（sort_keys=True、ensure_ascii=True）。均为组件内私有，contracts 无统一 helper。二者不迁移（会改变已冻结身份）。
+- **决策：新增 `core.contracts.canonical_json_bytes` / `canonical_sha256`：canonical JSON（UTF-8、ensure_ascii=False、sort_keys=True、
+  separators=(",",":")、allow_nan=False、无末尾换行、不做 Unicode 规范化）→ SHA-256。** 只接受 dict（str 键）/ list / tuple / str / int / bool /
+  None / 有限 float；其余抛 ContractViolation。放 contracts 的理由：S8 起各实验的 *_digest、未来 IndexManifest 的协议身份，以及可能由 retriever
+  组件导出的配置 payload 都需同一定义，而组件只能 import contracts。
+- 冻结值（prereg §10，`shasum` 对代码块字节独立复核一致）：`total_order_protocol_digest = 99c87596…`、`query_protocol_digest = e26afbf3…`、
+  `metric_protocol_digest = e78d361f…`；`retrieval_config_digest`（bm25）未计算，见下一条。
+
+### [L2] 新缺口：BM25 query term multiplicity（`BM25_BASELINE_PROTOCOL_READY` 改记为 NO）
+
+- owner_experiment: S8
+- 事实（`MEASURED`，只读 probe：按 D11 analyzer 切分 39 道 question，未计算任何 BM25 分数）：21 / 39 题含重复 token（58 次额外出现），
+  含实词（FL06 alcohol×4 / testing×3；CD02 internal×3；PR04 permit×2、work×2；PR02、FL07、FL15、ML02 等）。
+- D11 冻结了 analyzer、IDF、k1、b、过滤与 indexed text，但**没有规定 query 中重复 token 计一次（SET）还是每次出现都计（MULTISET）**；
+  两者都是常见"标准 BM25"实现，对上述 21 题给出不同排序。同一裁决还需给出数值求值约定（求和顺序、IDF 求值式），因其决定 raw_score 末位比特与 artifact 字节。
+- **决策：`BM25_BASELINE_PROTOCOL_READY` 由上一条目 D11 的 YES 改记为 NO，直到人工裁决本项；AI 不选择。**
+  AI 倾向（仅供参考）：MULTISET（rank_bm25 / Lucene 多子句的行为），求和按 token 在 query 中的出现顺序。
+- 本项裁决后：按 prereg §6.4 字段清单计算 `retrieval_config_digest`，以"写于结果之前"的 amendment 写入 prereg。
+
+### [L2] ALL_MAPPED_GOLD known bias 与 CN03
+
+- owner_experiment: S8
+- **决策：`ALL_MAPPED_GOLD_STATUS = STRICT_MAP_UNION_DIAGNOSTIC_WITH_KNOWN_SUPPORTING_CITATION_BIAS`。** 它是 strict map-union diagnostic，不是 answer-completeness metric。
+- CD01 / FL07 / FL06 含支撑 acceptable 或仅佐证的 citation（D1-A probe，`DERIVED`）。在 probe 角色成立的前提下，从 report.csv 机械并出必需 citation 的 cover：
+  CD01 = 4 chunks（SMM:p73:0/1 + ERM:p105:0/1；非必需 SMM:p74:0）；FL07 = 2（QMM:p32:4/5；非必需 QMM:p34:2）；FL06 = 3（QMM:p33:0/1/2；佐证 QMM:p34:0，probe 强度"中"）。
+- 低 ALL_MAPPED_GOLD 不得自动解释为 retrieval failure 或 insufficient answer evidence；报告须同时给出结构上限（prereg §7.2，由 map 的 |gold| 推出）。
+- **`CN03_CITATION_LOGIC = ANNOTATION_CONFLICT_REQUIRES_HUMAN_REVIEW`**：required_elements / canonical evidence 指向 ERM p14 必需，rationale 表达 OR 意图，二者不能同时推出唯一 citation logic。
+  testset 未改；不替人裁。
+
+### [L3] 预注册文件
+
+- 人工裁决 A：路径 `experiments/M1c_preregistration.md`（milestone 级，与 M2 同级）。已创建。`PREREG_BEFORE_RESULTS = YES`（仓库中无任何 retriever 实现，未运行任何检索）。
+- 冻结内容：query protocol、leakage policy、indexed text、k = (1, 2, 3, 5, 20)、ANY_GOLD / GOLD_COVERAGE / ALL_MAPPED_GOLD 与其 known bias、CN03 冲突、
+  answer / refuse 分母、multilingual 报告、确定性全序、corpus_ordinal zero-based、BM25 analyzer / 非负 IDF / k1 = 1.2 / b = 0.75、relevance / match_score 语义、
+  retrieval result record、JSONL 确定性、digest protocol、fixed-k / packed 分离、real retrieval-window measurement、reranker k = 2 / 3 与阈值 NOT_FROZEN、
+  TTFT 两个状态、evidence coverage ≠ answer quality、operating point 等 M2、vector / hybrid NOT_READY、IndexManifest gap。
+- `PROPOSED`（随审核确认）：BM25 kind 取值（bm25_raw / bm25_match_score / bm25_match_score）；逐题行字段顺序；rank 从 1 开始（与 0-based corpus_ordinal 不同基）；
+  文件布局（首行 run identity）；analyzer "L\* / N\* / M\*" 是对 D11 文字的机械翻译。
+- `NOT_FROZEN`：query term multiplicity 与数值求值约定（阻塞）；`retrieval_config_digest`。
+
+### [L3] TTFT（人工裁决 E，未改）
+
+- `TTFT_BUDGET_10S_STATUS = BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED`；`MAX_ACCEPTABLE_TTFT_EXPLORATION_CEILING = 180_SECONDS_NOT_AN_EXECUTABLE_CONTRACT`；
+  `S8_EVIDENCE_COVERAGE_IS_ANSWER_QUALITY = NO`。已写入 prereg §12；数值常量未动。
+
+### [L3] contracts.py 本轮改动（叠加在上一条目候选之上，待人工审核 diff）
+
+- 新增：`RetrievalResultRecord`、`Retriever.search_records`、`validate_retrieval_records`、`RETRIEVAL_RECORD_JSON_FIELDS`、`retrieval_record_json_object`、
+  `serialize_retrieval_record`、`canonical_json_bytes`、`canonical_sha256`；Hit docstring 增加 bm25 relevance 一行与指向 record 的说明（Hit 字段未改）。
+- 修改上一轮候选的一处叙述（文件末"0.3.1 版本内追加"块）：原写"版本规则只针对 Chunk 结构或引用语义"——审计显示这只是互相冲突的几种读法之一，
+  原样保留会把未裁决的读法当作事实；改为记录审计结论与"提交前须裁决"。R1–R4 文字未改。
+- 未改：全部数值常量、CONTRACTS_VERSION、Chunk / Citation / EvalItem / Hit 字段 / GoldChunkMap schema 与校验 / EvalItemResult / IndexManifest / pack_context / MatchLevel。
+- 测试（`MEASURED`）：`tests/test_contracts_retrieval.py` 18 → 55；5 个模块共 213 OK。变异检查 11 个真实变体全部被拦（见 blocker closure 会话报告）；
+  canonical GoldChunkMap 在改后 contracts 下仍 PASS、重序列化逐字节相等；`construction_rules_identity` 未变。
+
+### [L3] 上一条目"留待人工确认的空白"的去向
+
+- prereg 路径 → 已关闭（裁决 A）。单路 relevance → BM25 已关闭（裁决 C）；vector / hybrid 仍 NOT_FROZEN（随各自 protocol）。
+- RAW_SCORE 与 corpus_ordinal 的载体 → 已关闭（裁决 D：RetrievalResultRecord）。corpus_ordinal 基数 → 已关闭（裁决 B：0-based）。
+- *_digest 计算方式 → 算法已冻结，3 / 4 个 payload 已冻结；`retrieval_config_digest` 等 query term multiplicity 裁决。
+- 新增开放项：CONTRACTS_VERSION 语义（BLOCKED）；BM25 query term multiplicity（阻塞 BM25 实现）。
+
+
+## 2026-10-01 · S8 / M1c final protocol closure：版本拆分 + BM25 MULTISET（apply for review）
+
+作用域：HEAD `d28d130de33ec4abf79b67cff12dfd9e33b885be`（== origin/ship-rag，0 / 0，staged 空）；候选 diff 只来自前两轮 protocol apply
+（开场 sha：DECISIONS `b7691765…`、contracts `3138c16e…`、执行手册 `74a1fe4d…`、tests/test_contracts_retrieval `c7c2dd70…`、prereg `81b6f46f…`）。
+依据：人工裁决 A（BM25 MULTISET）/ B（fsum 累加）/ C（版本 SPLIT）/ D（legacy 兼容）/ E（两层测试）/ F（kind 名）/ G（rank / ordinal / 布局 / 接口）。
+本条目由 AI 按裁决机械落地，待人工审核 diff。前两个同日条目的文字未改动。
+
+### [L3] 输入身份复核
+
+- `MEASURED`（EXPECTED 取 2026-09-28 Formal S6 字面量）：corpus `c8978777…` / 3409；testset `05614407…` / 39；map `8cf9f3be…`；report `f48018cb…`；
+  page_quality `69842896…` / 1335；builder `kaiva_phase_b_builder_v1` / `e89e6f94…` / `chars_per_token_est=4;chunk_min_chars=120;chunk_target_tokens=350`。
+  `INPUT_IDENTITY_DRIFT = NO`。token 数值常量只读、未改。
+
+### [L1] CONTRACT_VERSION_SEMANTICS_SPLIT（人工裁决 C / D 落地）
+
+- falsified_if: 出现一个只改检索 / 打包 / 生成侧契约（不在 GOLD_CHUNK_MAP_SEMANTICS_VERSION 递增清单内）的改动，却确实改变了某份 GoldChunkMap 的正确性或解析结果。
+- 原则：invalidation 由实际 dependency 决定，不由"都位于 core/contracts.py"决定。审计前状态 `C_MIXED_AMBIGUOUS`（同日 blocker closure 条目）。
+- **决策：`CONTRACTS_VERSION` = 整个可执行契约模块的版本，0.3.1 → `0.4.0`（每个 `contract:` commit 递增，与历史一致）；
+  新增 `GOLD_CHUNK_MAP_SEMANTICS_VERSION = "0.3.1"`，是 GoldChunkMap 兼容判定的唯一依据；其递增清单（实际依赖）写在常量注释中：
+  Chunk / Citation / EvalItem 被读字段、normalize_text / split_quote_fragments / is_sole_match_eligible / QUOTE_FRAGMENT_MIN_CHARS_FOR_SOLE_MATCH、
+  MatchLevel / FORMAL_MATCH_LEVELS / MATCH_LEVEL_REASON / GOLD_CHUNK_MAP_REPORT_COLUMNS、GoldChunkMap 字段 / 序列化 / 文件名、validate_gold_chunk_map 接受条件。**
+- migration design 比较（前提：canonical map 字节不变）：
+
+  | | D1 新增显式字段 + legacy 规则 | D2 保留字段名 contracts_version、收窄语义 | D3 schema 不变、validator 维护兼容表 |
+  |---|---|---|---|
+  | canonical map 字节 | 不变（新字段默认 None，序列化省略） | 不变 | 不变 |
+  | schema 清晰度 | 高：contracts_version 在 GoldChunkMap / IndexManifest 中同义（整模块），兼容判定字段名即语义 | 低：同名字段在 GoldChunkMap 指语义版本、在 IndexManifest 指整模块 | 中：字段名仍是 contracts_version，语义靠表外知识 |
+  | 未来歧义 | legacy 规则只服务拆分前闭集，未来映射显式自述 | 高：未来读者无法从字段名区分两种含义 | 中：每次整模块递增都必须同步维护表，漏维护 = 静默失效或静默放行 |
+  | validator 复杂度 | 一个 helper（约 20 行）+ 一个闭集常量 | 最小 | 一张随版本增长的表 |
+  | 向后兼容 | legacy 映射按规则接受；拆分后缺字段的映射拒绝 | 接受 | 接受（若表已维护） |
+  | 未来生成 | resolver 写显式字段（一行） | resolver 须写语义版本进 contracts_version，与整模块版本冲突 | resolver 不变，但写入的是整模块版本，兼容只能查表 |
+  | IndexManifest | 不受影响；contracts_version 在两处同义 | 两处不同义 | 不受影响 |
+
+  **选择 D1。**
+- legacy 规则（写入 GoldChunkMap docstring 与 `_gold_chunk_map_semantics_version_of`）：`gold_chunk_map_semantics_version` 缺失 → 当且仅当
+  `contracts_version ∈ GOLD_CHUNK_MAP_PRE_SPLIT_CONTRACTS_VERSIONS = {"0.2.0", "0.3.0", "0.3.1"}` 时把 contracts_version 读作语义版本；否则拒绝。
+  字段存在而 contracts_version 属于该闭集 → 拒绝。闭集取自 git 历史（`CODE_FACT`：a1973ef 0.2.0 / b866134 0.3.0 / d30ed34 0.3.1 的 GoldChunkMap
+  有 contracts_version 字段；ae33bc4 0.2.0-draft 没有），拆分是一次性事件，闭集不增长。不看文件名 / 路径 / mtime / 日期，不做版本区间推断。
+  闭集的作用：防止将来语义版本与某个拆分后整模块版本号碰撞时，缺字段的映射靠"两数相等"蒙混通过（有专门测试）。
+- **canonical map 仍有效（`MEASURED`）：字节 2026 / sha `8cf9f3be…` 不变、未再生；0.4.0 下 `serialize_gold_chunk_map(parse(file))` 逐字节等于文件；
+  `validate_gold_chunk_map` PASS（legacy 规则 → 语义版本 0.3.1）。**
+- resolver（compatibility-only）：`identity_map()` 增加一个关键字 `gold_chunk_map_semantics_version=contracts.GOLD_CHUNK_MAP_SEMANTICS_VERSION`；
+  `contracts_version` 仍写 CONTRACTS_VERSION（provenance）。AST 证明：45 个顶层语句中只有 identity_map 不同，且只多这一个关键字；
+  resolve_quote / _minimum_covers / resolve_all / build_mapping / load_corpus / load_testset / write_report / run 的 AST 不变。
+- 真实数据（`MEASURED`，输出写入会话 scratch，未触碰 canonical）：用 0.4.0 resolver 对 canonical 输入再生 → mapping 完全相同；report.csv 逐字节相同
+  （`f48018cb…`）；map 只有两处不同：contracts_version 0.3.1 → 0.4.0、新增 gold_chunk_map_semantics_version = 0.3.1。
+- 对 2026-09-28 Formal S6 `falsified_if`（"同一冻结输入下 resolver 不能逐字节再生这份 map / report"）的影响，记录供人工判断：
+  report 在新代码下仍逐字节再生；map 的 mapping 逐项再生，但 map 文件字节因版本 identity 字段而不同 —— 任何 CONTRACTS_VERSION 递增都会如此。
+  逐字节再生 canonical map 仍可在其生成代码（contracts d30ed34 + resolver 8719761）上完成。AI 判断这不是 mapping 可复现性的失败，未据此改任何东西。
+- IndexManifest：未改；其 contracts_version 继续表示整模块版本（与约定 9 岸船共用同一份 contracts 一致）。`INDEX_MANIFEST_CONTRACT_GAP = YES` 不变。
+
+### [L2] BM25 query term semantics（人工裁决 A）
+
+- owner_experiment: S8
+- **决策：`BM25_QUERY_TERM_SEMANTICS = MULTISET`。** analyzer 产生的 query token 序列保留重复，每次出现贡献一次 term contribution；不得先转成 set / unique terms。
+- 理由（人工）：SET 是额外的信息删除；MULTISET 保留 query term frequency；document 侧已保留 tf，不应无证据地在 query 侧删除 frequency。
+- protocol-impact evidence（`MEASURED`，不是检索结果）：21 / 39 题含重复 analyzer token（58 次额外出现）；FL06 alcohol×4 / testing×3、CD02 internal×3、PR04 permit / work 各×2。
+
+### [M] BM25 deterministic accumulation（人工裁决 B）
+
+- why_not_falsifiable: raw_score 是全序主键，累加方式必须固定以保证同输入同字节，这是可复现性方法要求。
+- runtime gate（`MEASURED`，CPython 3.12.14 / arm64 / Darwin）：`math.fsum` 存在；20000 个非负随机向量上 == 精确和的正确舍入 20000 / 20000，
+  打乱顺序后结果改变 0 / 20000；朴素循环正反序不等 1196 / 2000；3.12 内建 `sum()` 已改用补偿求和（`sum([1e16, 1.0, -1e16])` = 1.0、朴素 = 0.0）。
+  **无 compatibility blocker。** fsum 对 inf / nan 不报错 → 由 helper 先拒绝。平台注记：x87 扩展精度构建可能偶发末位双重舍入（CPython 文档），
+  x86-64 / arm64 不受影响，船端实测属 M6。
+- **决策：`BM25_ACCUMULATION = MATH_FSUM_QUERY_TOKEN_ORDER`**：贡献按 analyzer 输出的 query token 物理顺序（含重复）枚举，`math.fsum` 求和。
+  可执行形式 `core.contracts.bm25_accumulate(query_tokens, term_contribution)`：只接受 list / tuple（set / frozenset / dict / 视图 / Counter /
+  生成器 / str → ContractViolation），每次出现按序恰调用一次 term_contribution，贡献须有限、≥ 0、非 bool。放在 contracts 的理由：
+  未来 BM25 组件只能 import core.contracts；与 bm25_match_score 同处。IDF、tf 归一化式、k1 / b、analyzer 仍属预注册，不进 contracts。
+- 注（`DERIVED`）：fsum 的结果与顺序无关，"按 query token 顺序"约束的是枚举 / 调用顺序（测试以调用记录验证），不是数值；
+  单个 term contribution 的浮点求值式由实现固定、以 code_commit + runtime identity 绑定；确定性验收是同 code_commit / 同 runtime 的 Run A == Run B。
+
+### [M] SET-vs-MULTISET tuning prohibition
+
+- why_not_falsifiable: 禁止在评测集上择优选择协议是实验有效性的方法要求。
+- **决策：SET-vs-MULTISET selection on v5.3 is prohibited test-set tuning.** 不得在 v5.3 上比较 SET 与 MULTISET（或其他 query term 语义）后择优。已写入 prereg §6.3。
+
+### [L2] BM25 score kind 名（人工裁决 F）
+
+- owner_experiment: S8
+- **决策：`raw_score_kind = "bm25_raw"`、`relevance_kind = "bm25_saturation"`、`match_score_kind = "bm25_saturation"`**（取代上一条目的提案 bm25_match_score）。
+  kind 描述数怎么算出来，不是字段名；BM25 baseline 上 relevance == match_score 且两 kind 相等，允许且正确；字段语义仍不同。
+- 合成非 BM25 测试继续证明 relevance ≠ match_score 可表达；collapse / swap 变异（序列化中 relevance_kind ← match_score_kind、relevance ← match_score、
+  match_score ← relevance）全部被拦，且**只**被合成非 BM25 向量拦下。
+
+### [L3] rank / ordinal / 布局 / 接口（人工裁决 G）
+
+- **决策（FROZEN）：retrieval rank 1-based；corpus_ordinal 0-based physical line ordinal；prereg 并排写出、不统一。**
+- **决策：S8 normative JSONL 首行 = run identity；之后每行一题，按冻结评测集顺序。**
+- **决策：`search_records(query: str, k: int = TOP_K_RETRIEVE)` 名称与签名 FROZEN。**
+- 逐题字段顺序按上一稿提案机械冻结：`question_id, expected, type, language, gold_count, empty_result, max_match_score, top1_doc_id,
+  first_gold_rank, gold_ranks, hits`。
+- 为使首行可确定性序列化而做的机械细化（AI，随本 diff 审核）：run identity 键序；`schema_version = "M1c_S8_retrieval_result_v1"`；
+  python_version / platform / unicodedata_unidata_version 的取值来源；tracked 树不干净不得产出 normative artifact。
+
+### [L3] RESULT_SCHEMA_COMPLETE = YES
+
+- 只读核对（prereg §9.4 逐项表）：ANY_GOLD / GOLD_COVERAGE / ALL_MAPPED_GOLD @1/2/3/5/20、first_gold_rank、gold_ranks、分母、多语种逐题、
+  refuse / trap 诊断、reranker k = 2 / 3、packed-context measurement、S9 再分析 —— 都能在不重跑 retrieval 的前提下由 normative artifact +
+  sha 绑定的冻结输入（GoldChunkMap / testset / corpus）+ 预注册字面量重算。
+- 唯一不在行内的是 pair_id（eval 元数据）：由 testset 按 question_id join；按 D10 逐题最小字段清单不加入。
+- 更正（AI 自己上一稿的措辞）：prereg 曾写"metric 由 normative artifact + GoldChunkMap 重算"，与 §11 packed measurement 需要 corpus 自相矛盾，已改为上述输入集合。
+
+### [L3] canonical JSON implementations coexist
+
+- 事实（`CODE_FACT`，AST 扫描全部 tracked + untracked 非测试 .py 的 `json.dumps` 与 hashlib 调用点）：把结构化 payload 规范化后再取哈希的实现
+  **`CANONICALIZATION_IMPLEMENTATIONS = 3`**，规则互不相同：
+
+  | owner | 函数 / 路径 | 规则 | 依赖它的冻结 artifact |
+  |---|---|---|---|
+  | contracts（新） | `core/contracts.py` canonical_json_bytes / canonical_sha256 | UTF-8、ensure_ascii=False、sort_keys=True、(",",":")、allow_nan=False、无末尾换行、类型白名单 | S8 prereg 四个 digest（未提交） |
+  | builder | `ingest/builder_identity.py` _canonical + construction_rules_identity | 自定义规范化（Pattern→{re,flags}、dict→排序键值对列表、set→按 JSON 排序）后 json.dumps(ensure_ascii=False, (",",":"))，无 sort_keys | construction_rules_sha256 `e89e6f94…`（canonical GoldChunkMap 的 identity 字段） |
+  | OCR | `components/parsers/ocr_artifact.py` `_JSON_KW` → ocr_params_canonical / CacheIdentity.canonical / serialize_artifact | sort_keys=True、ensure_ascii=True、(",",":")；artifact 字节另加 "\n" | ocr_params_digest、cache identity、accepted OCR artifacts 与 index.jsonl（2026-09-28 记录 accepted manifest `c0e5b037…`） |
+
+  另有确定性 artifact 序列化器（不是"规范化后取哈希"，但其输出字节的 sha 是冻结身份）：serialize_gold_chunk_map（indent=2）→ `8cf9f3be…`；
+  build_corpus 的 chunks.jsonl / page_quality 写出 → `c8978777…` / `69842896…`；resolver write_report 的 fragment_matches_json → `f48018cb…`；
+  serialize_retrieval_record（新）。scripts/ 下的 prereg 文本块哈希是对冻结字符串取哈希，不是 JSON 规范化。
+- **决策：本轮不迁移 legacy implementations。** 理由：它们服务已冻结 artifact，迁移可能改变冻结 sha。
+- **新代码纪律：从 S8 起，新的 cross-experiment canonical digest 必须使用 `canonical_json_bytes` / `canonical_sha256`；不得新增第四套。**
+- followup：若未来统一 legacy implementations，必须先证明所有受影响冻结 artifact 的 sha 不变，或走明确 migration。
+
+### [L3] prereg 定稿
+
+- `experiments/M1c_preregistration.md`：`PREREG_STATUS = FROZEN_FOR_BM25_BASELINE`，`PREREG_BEFORE_RESULTS = YES`（仍无任何 retriever 实现、未运行任何检索）。
+  不再含 PROPOSED。新增 / 改动：§6.3 MULTISET + fsum + 禁止择优 + gate 证据；§6.4 / §10.2 `retrieval_config_digest = 49f4dd23…`（1330 bytes，
+  payload 比上一稿字段清单多 term_contribution）；§5 kind 名；§9.1 run identity 键序；§9.2 rank / ordinal 并排表、布局、接口；§9.4 完整性表；§0 / §1 版本拆分。
+  其余三个 digest 未变（`99c87596…` / `e26afbf3…` / `e78d361f…`）；四个代码块均经 `shasum` 对字节独立复核。
+- 保持：VECTOR / HYBRID NOT_READY；RERANKER_DECISION_THRESHOLD NOT_FROZEN；ALL_MAPPED_GOLD = strict map-union diagnostic；
+  CN03 = ANNOTATION_CONFLICT_REQUIRES_HUMAN_REVIEW。
+- analyzer 一行"L\* / N\* / M\*"未在本轮单独裁决，按 Unicode 定义（General_Category M 的别名即 Combining_Mark）作机械翻译冻结；若人工不同意，retrieval_config_digest 随之改变。
+
+### [L3] TTFT（未改）
+
+- `TTFT_BUDGET_10S_STATUS = BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED`；`MAX_ACCEPTABLE_TTFT_EXPLORATION_CEILING = 180_SECONDS_NOT_AN_EXECUTABLE_CONTRACT`；
+  `S8_EVIDENCE_COVERAGE_IS_ANSWER_QUALITY = NO`。数值常量未动。
+
+### [L3] 本轮代码 / 测试改动与验证
+
+- contracts：CONTRACTS_VERSION 0.4.0；GOLD_CHUNK_MAP_SEMANTICS_VERSION；GOLD_CHUNK_MAP_PRE_SPLIT_CONTRACTS_VERSIONS；GoldChunkMap 末位可选字段；
+  `_gold_chunk_map_semantics_version_of`；validate / serialize 相应改动；`bm25_accumulate`；文件末改动记录块由"0.3.1 版本内追加（未递增）"
+  改写为"0.4.0 相对 0.3.1"（R1–R7 原文保留，新增 V1 / B1；原块中"是否递增待裁决"一段因本裁决失效而删除）。
+- resolver：见上，一个关键字。
+- tests：tests/test_contracts_retrieval.py 55 → 65（T-B1–T-B6 等，kind 改名）；新增 tests/test_contracts_gold_chunk_map_versioning.py 19（T-V1–T-V9 及补充）；
+  tests/test_contracts_gold_chunk_map.py 版本断言更新（test_version、test_fields、make_map 写显式字段、t6 改为语义版本）；
+  tests/test_resolve_gold_chunks.py 增一条端到端断言。全套 6 模块 242 discovered / 242 executed / 242 passed / 0 skipped / 0 failed / 0 errors，RC = 0。
+- 变异检查（`MEASURED`，在 scratch 镜像中逐个注入）：19 个变体全部被杀 —— query 去重（set / dict.fromkeys）、sorted 重排、API 接受无序容器、朴素循环、
+  内建 sum、relevance / match collapse ×2、swap、legacy fallback 删除、legacy 接受任意版本、闭集检查删除、语义版本不匹配放行、改回比较 CONTRACTS_VERSION、
+  显式字段 + 拆分前版本检查删除、序列化写出 null 字段、resolver 写 CONTRACTS_VERSION / 省略字段 / 钉死字面量。`TEST_DEFENSE_INCOMPLETE = NO`。
+
+### [L3] docs followup（本轮只登记）
+
+- README.md "当前 `CONTRACTS_VERSION = \"0.3.1\"`" 在提交后过时（不在本轮允许修改的文件内）。
+- 执行手册 S6.0 identity 字段列表未提新字段；S6.1 记录值 "CONTRACTS_VERSION 0.3.1" 已标注为 2026-09-28 测量记录（历史，未改）。
+- GOLD_CHUNK_MAP_SEMANTICS_VERSION 的递增依赖人按清单执行，没有类似 builder 登记表的 AST 守卫。
+
+
+## 2026-10-01 · S8 / M1c final protocol closure：mathematical-semantics boundary（apply for review）
+
+作用域：HEAD `d28d130de33ec4abf79b67cff12dfd9e33b885be`（== origin/ship-rag，0 / 0，staged 空）；开场时候选 diff 与上一条目结束时逐文件 sha 相同
+（DECISIONS `81a715f5…`、contracts `04bc0823…`、resolver `271f2f18…`、两个 tracked 测试、两个 untracked 测试、prereg `ef346c73…`；执行手册未变）。
+依据：人工裁决（本轮）—— BM25 冻结数学语义而非回调执行轨迹；可复现性作用域；版本 SPLIT 与 legacy 规则的两层测试；历史逐字节再生的作用域。
+本条目由 AI 机械落地，待人工审核 diff。前三个同日条目未改动；其中与本条冲突的表述由本条更正（append-only）。
+
+### [L3] 输入身份与审计复核
+
+- `MEASURED`：corpus `c8978777…` / 3409；testset `05614407…` / 39；map `8cf9f3be…` / 2026 bytes；report `f48018cb…`；page_quality `69842896…` / 1335；
+  builder 三项不变；token 数值常量 1050 / 200 / 0.90 / 765 / 4 / 5 只读未改。`INPUT_IDENTITY_DRIFT = NO`。
+- canonical map 在**改动前的 HEAD 代码**下校验（`git archive HEAD` 导出树内 import 其自身 contracts，CONTRACTS_VERSION 0.3.1）：PASS，重序列化逐字节相等；
+  在 0.4.0 候选下同样 PASS。
+- CONTRACTS_VERSION 审计对 HEAD 重做（`CODE_FACT`）：常量注释"索引包与运行时一致性"/递增条件"Chunk 结构或引用语义"；consumer = IndexManifest（字段）、
+  GoldChunkMap（字段）、resolver（写入）、validate_gold_chunk_map（`contracts.py:1161` 严格相等，canonical acceptance 条件）；EvalItemResult 无该字段（有 code_commit）；
+  文件名不含该字段。**`CONTRACTS_VERSION_SEMANTIC_CLASS_BEFORE = C_MIXED_AMBIGUOUS`（复核确认）。**
+- 依赖回答（`CODE_FACT`，AST）：GoldChunkMap 的生产方（resolver）与接受方（validate / serialize / filename / validate_eval_item / 片段切分）触达的 contracts 符号中，
+  检索 / 打包 / 生成侧符号（Hit、RetrievalResultRecord、retrieval_order_key、bm25_*、pack_context、MIN_RELEVANCE、TOP_K_*、预算常量、canonical_*）**为 0**；
+  CONTRACTS_VERSION 只经 HEAD 的严格相等检查到达接受方。→ 只改检索语义时，按依赖 GoldChunkMap **不应**失效；HEAD 下却会被机械判失效。SPLIT 消除这一冲突。
+- GOLD_CHUNK_MAP_SEMANTICS_VERSION 递增清单按该 AST 扫描补全（加入 validate_eval_item、testset_version_from_path、CORPUS_SHA_PREFIX_CHARS）。
+
+### [L2] BM25：冻结数学多重性，不冻结回调执行轨迹（更正上一条目）
+
+- owner_experiment: S8
+- **决策（人工）：`BM25_MULTIPLICITY_SEMANTICS = MATHEMATICAL_OCCURRENCE_MULTIPLICITY`；`BM25_CALLBACK_INVOCATION_COUNT_IS_CONTRACT = NO`；
+  `BM25_ACCUMULATION = MATH_FSUM`。** 贡献多重集 C 中每次 query token 出现恰对应一个元素，raw score = `math.fsum(C)`。contribution 函数被调用几次、
+  以什么顺序被调用不属于契约；逐次求值与按 token 缓存只要 C 相同都合法，合法缓存不得改变结果。前提：contribution 对固定文档是 token 的纯函数。
+- 更正上一条目（"final protocol closure：版本拆分 + BM25 MULTISET"）中的三处表述，以本条为准：
+  "每次出现按序恰调用一次 term_contribution"（[M] BM25 deterministic accumulation 与 [L3] 本轮代码改动）→ 作废；
+  `BM25_ACCUMULATION = MATH_FSUM_QUERY_TOKEN_ORDER` → `MATH_FSUM`（fsum 结果只取决于多重集，顺序不是契约可见属性）；
+  "x87 … x86-64 / arm64 不受影响" → 作废，仓库只有本机 arm64 实测，船端 x86 未测（M6）。
+- 落地：`bm25_accumulate()` docstring 改为多重集契约；实现改为每个不同 token 求值一次、按出现次数展开后 fsum（体现缓存合法）；仍只接受 list / tuple。
+  测试删除全部回调轨迹断言（调用次数 / 调用顺序 / spy），改为只看契约可见得分：T-B1 多重性 3（2 的幂贡献使得分唯一反解出现次数）、T-B2 SET ≠ MULTISET、
+  T-B3 缓存实现与逐次重算逐比特相同（含用户示例 Implementation A / B）、T-B4 同一多重集的全部排列逐比特相同、T-B5 fsum 与朴素循环 / 内建 sum 可区分、
+  T-B6 去重或无序表示被拒。`MEASURED`：tests 中对调用次数 / 顺序 / spy 的断言数 = 0。
+- 合法变体对照（`MEASURED`）：把实现改为逐次求值（无缓存）、或按 sorted 顺序枚举贡献 —— 两者测试均通过（证明测试未把轨迹或顺序当 oracle）。
+
+### [M] BM25 可复现性作用域
+
+- why_not_falsifiable: 声明可复现性的作用域是证据纪律，不是关于系统的经验主张。
+- **决策：同一 committed implementation（code_commit）+ 同一声明的 runtime / protocol identity → 期望确定性 artifact。不宣称任意 Python / libm / 平台之间
+  BM25 raw score 逐比特相同；不冻结特定 libm、CPU 浮点微架构、跨平台 `math.log`、单个 contribution 的浮点求值式。** 写入 prereg §6.3.1。
+- 因 payload 改动，`retrieval_config_digest`（bm25）由上一条目的 `49f4dd23…` 变为 **`3069070aad6aec04259313c0242a251c191808f53cde574cf6534529034b8a2e`**（1495 bytes）；
+  numeric_evaluation 现含 accumulation = math.fsum、accumulation_input = 每次出现一个元素的贡献多重集、callback_invocation_count_is_contract = false、
+  reproducibility_scope、cross_platform_bit_identity_claimed = false。其余三个 digest 不变。四个代码块均经 `shasum` 独立复核。
+
+### [L1] 历史逐字节再生的作用域
+
+- falsified_if: 在 canonical map 的原生成身份（contracts d30ed34 内容 + resolver 8719761 + 冻结输入）下，resolver 不能逐字节再生 `8cf9f3be…`。
+- 事实（`MEASURED`，本轮，输出只写 scratch）：HEAD 导出树（contracts = d30ed34 内容、resolver = 8719761）在 canonical 输入上再生 → map **逐字节相同**
+  （`8cf9f3be…` / 2026 bytes）、report 逐字节相同；0.4.0 resolver 再生 → mapping 相同、report 逐字节相同（`f48018cb…`）、级别分布 L1 30 / L2 8 相同，
+  map 字节不同（`5ded46a0…` / 2073 bytes），差异只在 contracts_version（0.3.1 → 0.4.0）与新增 gold_chunk_map_semantics_version = 0.3.1。
+- **决策：`HISTORICAL_MAP_BYTE_REPRODUCIBILITY_SCOPE = ORIGINAL_GENERATION_IDENTITY`。** 历史 map 的逐字节重建身份绑定其当年的实现、契约语义与输入；
+  0.4.0 resolver 生成的新 map 不要求与历史 map 逐字节相同，这不是 historical reproducibility failure。不声称"0.4.0 resolver 能逐字节再生 0.3.1 canonical map"。
+  canonical 历史 artifact 保持冻结、sha 不变，按 documented legacy 规则有效。GoldChunkMap docstring 已写明该作用域。
+
+### [L3] 版本拆分复核与测试编号
+
+- pre-split 闭集对 core/contracts.py **全部 5 个历史提交**机械恢复（d30ed34 0.3.1 / b866134 0.3.0 / a1973ef 0.2.0 有 contracts_version、无语义字段；ae33bc4 0.2.0-draft 无该字段；
+  d9fdb35 无 GoldChunkMap）= {"0.2.0", "0.3.0", "0.3.1"}，与常量相等；对应测试在有 .git 时从历史重新推导并比较。
+- 测试编号与本轮 T-V1–T-V10 对齐：T-V5 = 拆分后缺字段的映射 FAIL；T-V10 = 版本号碰撞不能借 legacy 规则通过（原名 test_legacy_rule_cannot_be_hit_by_version_collision）。
+- `LEGACY_GOLD_CHUNK_MAP_COMPATIBILITY = PASS`；`CANONICAL_GOLD_CHUNK_MAP_STILL_VALID = YES`；canonical 字节 / sha 未变。
+
+### [L3] retrieval result record 与接口复核
+
+- RetrievalResultRecord 字段（chunk_id、corpus_ordinal、raw_score + kind、relevance + kind、match_score + kind）对 BM25（raw float）、future vector（raw cosine float）、
+  future hybrid（raw 精确 Fraction，序列化 "p/q"）与 S8 确定性 artifact 均可表达；不含 gold 标记、expected、判分。hybrid 的逐路诊断（各路名次 / 分数）不在 record 中 ——
+  不是 S8 冻结量所需，是否需要随 hybrid protocol closure 裁决（`HYBRID_BASELINE_READY = NO`）。
+- `search_records(query: str, k: int = TOP_K_RETRIEVE)`：定义在 core/contracts（component 只能 import contracts；依赖方向 components → contracts、eval → components）；
+  返回 `Sequence[RetrievalResultRecord]`；顺序由 retrieval_order_key 全序决定、由 validate_retrieval_records 校验。
+
+### [L3] canonicalization census（本轮重做，两类分开计数）
+
+- A 类：结构化 payload 规范化后取哈希的实现 **`CANONICALIZATION_IMPLEMENTATIONS = 3`** = 1 个跨实验 helper（`core.contracts.canonical_json_bytes / canonical_sha256`）
+  + 2 个规则不同的 legacy 私有实现（`ingest/builder_identity._canonical + construction_rules_identity`；`components/parsers/ocr_artifact` 的
+  `ocr_params_canonical` 与 `CacheIdentity.canonical`，二者同一规则集）。与上一条目一致。
+- B 类（不计入上数）：输出字节本身是冻结身份的 artifact 序列化器 —— serialize_gold_chunk_map → `8cf9f3be…`；build_corpus.build → chunks.jsonl `c8978777…` 与
+  page_quality.jsonl `69842896…`；resolver write_report → `f48018cb…`；ocr_artifact serialize_artifact / _rewrite_index → accepted OCR artifacts 与 manifest `c0e5b037…`；
+  另有新增 serialize_retrieval_record（尚无冻结 artifact）。scripts/ 下其余 json.dumps 是日志 / 报告输出。
+- 纪律不变（见上一条目）：不迁移 legacy；S8 起新的 cross-experiment digest 只用 canonical_json_bytes / canonical_sha256；不得新增第四套。
+
+### [L3] RESULT_SCHEMA_COMPLETE = YES（机械验证）
+
+- `MEASURED`：以**合成** ranking（种子随机抽取 corpus 行与 gold；非检索输出，未计算 BM25）按冻结 schema 生成 39 行、JSON 往返后，只用行内容 + sha 绑定的
+  corpus / GoldChunkMap / testset 重算：rank / first_gold_rank / gold_ranks / corpus_ordinal→chunk / top1_doc_id 一致；五个 k 的 ANY / COVERAGE / ALL（31 题）；
+  分母 31 / 28 / 8 / 7；zh / tl / hi 逐题；pair 经 testset join；packed-context 由 corpus_ordinal 重建 Hit 后调用可执行 pack_context。均无需重跑 retrieval。
+
+### [L3] prereg 定稿（本轮）
+
+- §6.3 改写为数学多重性 + MATH_FSUM + 回调调用次数非契约；新增 §6.3.1 边界与可复现性作用域；§6.4 / §10.2 新 digest；§9.2 rank / ordinal 并排表补全措辞
+  （rank 1 = first retrieval result；corpus_ordinal 0 = first physical line；不是 pdf_page / 页内序号 / chunk_id 字典序）；§9.4 记录机械验证。
+  `PREREG_BEFORE_RESULTS = YES`；`PREREG_STATUS = FROZEN_FOR_BM25_BASELINE`；SET-vs-MULTISET 择优禁令保留。
+- 保持：ALL_MAPPED_GOLD = strict frozen-map-union diagnostic（CD01 map 5 / 必需 citation cover 4；FL07 3 / 2；FL06 4 / 3 —— 角色为 probe `DERIVED`，强度强 / 强 / 中）；
+  CN03 = ANNOTATION_CONFLICT_REQUIRES_HUMAN_REVIEW；testset 未改。
+- TTFT 不变：`TTFT_BUDGET_10S_STATUS = BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED`；`MAX_ACCEPTABLE_TTFT_EXPLORATION_CEILING = 180_SECONDS_NOT_AN_EXECUTABLE_CONTRACT`；
+  `S8_EVIDENCE_COVERAGE_IS_ANSWER_QUALITY = NO`。
+
+### [L3] 测试与变异
+
+- 全套 6 模块：240 discovered / 240 executed / 240 passed / 0 skipped / 0 failed / 0 errors，RC = 0（retrieval 63、GoldChunkMap 43、versioning 19、resolver 38、
+  builder identity 18、Phase B 59；retrieval 由 65 → 63 是因为删去回调轨迹测试）。
+- 变异（scratch 镜像，逐个注入）：20 个，killed 20，survived 0 —— query 去重 ×2、API 接受无序容器、朴素循环、内建 sum、缓存存陈旧值、缓存重复项计 0、
+  relevance / match collapse ×2、swap、legacy fallback 删除、legacy 接受任意版本、语义版本不匹配放行、改回比较 CONTRACTS_VERSION、闭集检查删除（拆分后缺字段被接受）、
+  显式字段 + 拆分前版本被接受、序列化写出 null 字段、resolver 写 CONTRACTS_VERSION / 省略字段 / 钉死字面量。`TEST_DEFENSE_INCOMPLETE = NO`。
+  合法变体对照 2 / 2 通过（见上）。collapse / swap 三个变体只被合成非 BM25 向量拦下。
+
+### [L3] contracts 叙述复核
+
+- 已无"GoldChunkMap 兼容 == 当前 CONTRACTS_VERSION"的现行表述。残留的 0.3.1 / "切片语义一变旧映射即作废"出现在文件末 0.2.0 / 0.3.1 历史改动记录块（P4 等），
+  是当时的记录，按历史保留未改。
+
+### [L3] docs followup（`DOC_FOLLOWUP_REQUIRED = YES`，本轮不改）
+
+- README.md:15 "当前 `CONTRACTS_VERSION = \"0.3.1\"`"。
+- 执行手册_v4.md S6.0（"摘自契约"）identity 字段列表缺 `gold_chunk_map_semantics_version` 与版本拆分说明；S6.1 记录值 "CONTRACTS_VERSION 0.3.1" 与 1642 行
+  "contracts v0.3.1（d30ed34）" 是 2026-09-28 的历史记录（标注为测量记录）。
+- GOLD_CHUNK_MAP_SEMANTICS_VERSION 的递增仍靠人按清单执行（无类似 builder 登记表的 AST 守卫）。
