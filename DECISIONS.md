@@ -4024,3 +4024,50 @@ HUMAN_PENDING 文字不回改，其中的 HUMAN_PENDING 项由本条关闭。作
 ### 状态
 
 - `MODEL_SELECTION_STATUS = FROZEN_FOR_M1C`；`VECTOR_PROTOCOL_STATUS = FROZEN_FOR_M1C_BASELINE`；`SHIP_X86_EQUIVALENCE = NOT_MEASURED`；`S8_OVERALL_STATUS = OPEN`。
+
+
+## 2026-10-02 · S8 / M1c vector component closure
+
+**`S8_VECTOR_COMPONENT_STATUS = CLOSED`；`S8_OVERALL_STATUS = OPEN`。** 本条只记录 vector component 的正式证据；hybrid、失败归因与 reranker L1 决策仍未完成（见 K）。
+
+### [L2] M1c vector 检索基线（component）
+
+- owner_experiment: S8 / M1c
+- **A. protocol**：`VECTOR_PROTOCOL_COMMIT_SHA = 544349518a73106d506319035baeb8590fb85975`（prereg §15；人工裁决 D-V1–D-V10；
+  embedding_protocol_digest `38acb0b4260a516dffc32680067d5cb55c6c56d09a4d4045ebcda2d289b54af0`，vector retrieval_config_digest
+  `c9c3868cf19a77d2b88a705580367ba933930af28c265887d2da6aad7a0e7343`）。
+- **B. implementation**：`VECTOR_IMPLEMENTATION_COMMIT_SHA = 1a7c6749ba844e33f3237625c4e21f18c3d77c1e`（`components/retrievers/vector.py`
+  `0e6da0b29e36f8e9854680ec1be2d5778f67ff3ca3c512ccbd3053ec7b09335b`）；runner `eval/run_vector_eval.py`
+  `c436e37ee27da50a8e3ab40245bf09c8f37b441b293f8327952eba26084f7cb4`。模型 `bge-m3:latest`（blob `sha256:daec91ff…c3e062c`，manifest `79076464…`），
+  Ollama 0.34.0 / 0.23.1，`MAC_DEFAULT_METAL`，prefix ""，`truncate = false`，`CONTRACTS_VERSION = 0.4.0`。
+- **C. embedding artifact**：`experiments/m1c_s8_vector/corpus_embeddings.npy` sha256
+  `70c34277a2be8ce54b78474a81eeb0ced9276e0c5c3312b43446a4126cf54459`；rows 3409；dimension 1024；dtype float64；
+  meta `corpus_embeddings.meta.json` `0089f6d1942e177e596e15a8714c879d8a000fbccfd913fbea3933ffd8b946d1`。生成后两个全新进程对固定 9 行逐条重算，与已存行逐位相同。
+- **决策（人工）：`GIT_TRACK_CORPUS_EMBEDDINGS = YES`。** 理由：① 该 artifact 是 formal vector run identity 的输入；② 正式结果已绑定
+  `corpus_embeddings_sha256`；③ 约 28 MB，当前规模直接 Git tracking 足够；④ 入库使 fresh clone 能直接取得正式 vector baseline 输入；
+  ⑤ 当前语料是实验语料，不因此建立 artifact registry、cache manager、LFS 或 production vector-store 基础设施；⑥ artifact 仍可再生，
+  入库目的是 durability / provenance，不是因为它不可再生。
+- **D. 有效性（`MEASURED`）**：39 / 39 题；answer / refuse = 31 / 8；Run A / Run B（全新进程、不同 PYTHONHASHSEED）normative artifact
+  逐字节相同（`0e80682cfded9fb73db0b9204120582984f33604ab5bfbc88694d47f9d371073`）；不 import runner 的独立复算 PASS；每题返回 20 条；
+  `TEST_SET_TUNING_PERFORMED = NO`；`PROTOCOL_DRIFT = NO`。
+- **E. headline（31 道可答题，macro）**：
+
+  | 指标 | @1 | @2 | @3 | @5 | @20 |
+  |---|---|---|---|---|---|
+  | ANY_GOLD | 0.645 (20/31) | 0.871 (27/31) | 0.871 (27/31) | 0.935 (29/31) | 0.968 (30/31) |
+  | GOLD_COVERAGE | 0.509 | 0.754 | 0.768 | 0.858 | 0.935 |
+  | ALL_MAPPED_GOLD | 0.419 (13/31) | 0.645 (20/31) | 0.645 (20/31) | 0.774 (24/31) | 0.903 (28/31) |
+
+- **F. 与 BM25 的描述性比较（`DESCRIPTIVE_ONLY`）**：ANY@5 BM25 0.742 / vector 0.935；ANY@20 BM25 0.871 / vector 0.968。
+  不得据此直接决定 hybrid、reranker 或 M2 检索配置。
+- **G. 多语种**：first_gold_rank ML01（zh）= 2，ML02（tl）= 1，ML03（hi）= 2。
+- **H. top-20 无 gold 的可答题**：FL14（唯一）。
+- **I. 计时作用域**：probe 8 条 batch 热启动中位数 Metal ≈ 0.13 s、CPU（`num_gpu = 0`）≈ 1.20 s；formal vector 检索 39 题合计 ≈ 8.3 s（Metal）。
+  `DEV_MAC_TIMING_ONLY = YES`；`SHIP_X86_EQUIVALENCE = NOT_MEASURED`。不构成船端延迟或任何 SLA。
+- **J. 解释边界**：retrieval / evidence coverage ≠ answer quality；ALL_MAPPED_GOLD 仍为 strict map-union diagnostic；本结果不修改 numeric token contract、
+  TOP_K_CONTEXT 或 TTFT 状态（`TTFT_BUDGET_10S_STATUS = BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED`；
+  `MAX_ACCEPTABLE_TTFT_EXPLORATION_CEILING = 180_SECONDS_NOT_AN_EXECUTABLE_CONTRACT`）。
+- **K. S8 剩余**：`HYBRID_BASELINE = PENDING`；`FAILURE_ATTRIBUTION = PENDING`；`RERANKER_L1_DECISION = PENDING` → **`S8_OVERALL_STATUS = OPEN`**。
+- 证据文件：`s8_vector_results.jsonl`（normative，首行 run identity）、`s8_vector_metrics.json`
+  （`aa404fa9e1a33c3d1d3c87c5dde2624c70fc68471c6d79b16a56e37c0b286599`）、`s8_vector_run.log`
+  （`49866a59a73d4e95f21e9ce96cbfc92ddeeae6757bc2c74d9d546df968ad7543`）。
