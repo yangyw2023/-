@@ -4071,3 +4071,78 @@ HUMAN_PENDING 文字不回改，其中的 HUMAN_PENDING 项由本条关闭。作
 - 证据文件：`s8_vector_results.jsonl`（normative，首行 run identity）、`s8_vector_metrics.json`
   （`aa404fa9e1a33c3d1d3c87c5dde2624c70fc68471c6d79b16a56e37c0b286599`）、`s8_vector_run.log`
   （`49866a59a73d4e95f21e9ce96cbfc92ddeeae6757bc2c74d9d546df968ad7543`）。
+
+
+## 2026-10-02 · S8 hybrid protocol human decision
+
+人工裁决（Arya），在任何 hybrid 融合结果产生之前作出；本条由 AI 按裁决落地。D13 原文不回改；D13 中"RRF constant、per-route fusion depth、
+embedding dependency 尚未完全冻结 → `HYBRID_BASELINE_READY = NO`"由本条收窄并关闭（见 H2 / H3 / H10）。
+**`HYBRID_PROTOCOL_STATUS = FROZEN_FOR_M1C_BASELINE`；`S8_OVERALL_STATUS = OPEN`。** 预注册见 `experiments/M1c_preregistration.md` §16。
+
+### [L2] H1 · fusion family
+
+- owner_experiment: S8 / M1c（baseline）/ M5（任何融合消融）
+- **决策：`HYBRID_FUSION = UNWEIGHTED_RRF`**；只融合 frozen BM25 route 与 frozen vector route，两路权重 1 : 1。
+- 不得 sweep route weights、根据 v5.3 调权重、learning-to-rank 或 reranker。理由：D13 已冻结 unweighted RRF 方向且 baseline 不扫融合权重。
+
+### [L2] H2 · RRF constant
+
+- **决策：`RRF_K = 60`**；route rank r（1-based）的贡献 = `1 / (60 + r)`。
+- 理由：现有 contract 文本已用 Σ 1/(60+rank) 表达 RRF；D13 已冻结 unweighted RRF 方向；沿用 60 是 baseline 中新增自由度最少的选择。
+  不允许通过 v5.3 sweep RRF_K。
+
+### [L2] H3 · per-route fusion depth
+
+- **决策：`BM25_FUSION_DEPTH = 20`；`VECTOR_FUSION_DEPTH = 20`。** 某一路返回少于 20 条 → 使用该路实际返回的全部 hits。
+- 理由：两条 formal component baseline 都已冻结完整 top-20，正式 metrics 也评价到 @20。
+- 不得 padding fake hits、扩大到 > 20、为 hybrid 重跑 component retrieval。
+
+### [L2] H4 · candidate set
+
+- **决策：hybrid candidate set = union(BM25 frozen top-20, vector frozen top-20)**；每个 candidate 必须来自至少一路正式 component result；不得重新检索 corpus。
+
+### [L2] H5 · raw RRF score
+
+- **决策：`raw_rrf(d) = [d 在 BM25 top-20 ? 1/(60 + bm25_rank(d)) : 0] + [d 在 vector top-20 ? 1/(60 + vector_rank(d)) : 0]`**；
+  内部表示 exact `fractions.Fraction`，不得用 float 累加决定排序；序列化 `"p/q"`；`raw_score_kind = "rrf_k60_2route"`。
+- 理由：contracts `retrieval_order_key` 与 total-order digest 已规定 RRF 用精确有理数，浮点累加顺序会制造或抹掉 tie。
+
+### [L2] H6 · total order
+
+- **决策：primary = exact RRF Fraction 降序；exact tie → corpus_ordinal 升序；最终返回 top 20。**
+- 不得使用 route-specific tie preference、chunk_id 字典序、insertion order、dict / set order。理由：与 bm25 / vector 共用 contracts 的同一条全序规则。
+
+### [L2] H7 · relevance
+
+- **决策：`relevance = float(raw_rrf / Fraction(2, 61))`（= `float(raw_rrf * Fraction(61, 2))`）；`relevance_kind = "rrf_normalized_2route_k60"`。**
+  2/61 是两路、RRF_K = 60 时 raw RRF 的理论最大值（两路都排第 1），故 0 ≤ relevance ≤ 1。
+- relevance 不参与排序；排序只看 exact raw_rrf。
+
+### [L2] H8 · match_score
+
+- **决策：hybrid 不做 cross-route rescoring；`match_score(d) = max(d 实际出现的各路已冻结 match_score)`；`match_score_kind = "max_present_route_match_score"`。**
+  只在一路出现 → 取该路 match_score；两路都出现 → 取两者 max。不得为了补齐缺失 route 重新运行另一 scorer。match_score 不参与 RRF 排序。
+- 与 contracts 的关系：contracts Hit 契约锁死"各路归一化原始分的 max、不许加权和"，未规定某路未检索到该 chunk 时如何取值；本裁决取 present routes。
+  contracts.py 未改。
+
+### [L2] H9 · route diagnostics
+
+- **决策：正式 hybrid experimental artifact 必须保留 per-route provenance**：chunk_id、corpus_ordinal、hybrid rank、exact RRF raw score、relevance、
+  match_score；BM25 与 vector 各自的 present / rank / raw_score / match_score。
+- 属于 experimental result record；不因此扩张 production Hit schema。
+
+### [L2] H10 · input authority
+
+- **决策：formal hybrid baseline 直接消费已 durable-frozen 的 BM25 formal top-20 artifact 与 vector formal top-20 artifact；不得重新运行 BM25、vector 或 embedding。**
+  hybrid baseline 因此是 frozen component outputs 之上的纯 deterministic fusion。
+  - BM25：`experiments/m1c_s8_bm25/s8_bm25_results.jsonl` `9ce4df232af8c395e0749dcb2fd9c84e5376a7939ae20af7005b12d54dac3ba8`（evidence commit 56c5990）
+  - vector：`experiments/m1c_s8_vector/s8_vector_results.jsonl` `0e80682cfded9fb73db0b9204120582984f33604ab5bfbc88694d47f9d371073`（evidence commit 5b5a7ef）
+- D13 的 embedding dependency 由此冻结：hybrid 的 vector 输入就是上述 artifact，其 embedding 身份已由该 artifact 的 run identity 绑定（D-V1–D-V10）。
+
+### 状态
+
+- `HYBRID_PROTOCOL_STATUS = FROZEN_FOR_M1C_BASELINE`；`HYBRID_BASELINE_READY = YES`（仅 M1c baseline）。
+- D13 其余决策不变：baseline 不扫融合权重；任何 weight sweep 只作 exploratory，不得在 v5.3 上选择 M2 production configuration。
+- D13 登记的 `CONTRACT_NARRATIVE_FOLLOWUP`（contracts Hit docstring "融合权重是 L2 参数（M1c 要扫）"）仍未处理，本轮不改 contracts。
+- hybrid baseline 是 fixed-k retrieval baseline，不读取 packing 相关常量（D3 / D15）。
+- `S8_OVERALL_STATUS = OPEN`（`HYBRID_BASELINE`、`FAILURE_ATTRIBUTION`、`RERANKER_L1_DECISION` 仍 PENDING）。

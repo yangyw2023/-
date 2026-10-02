@@ -480,3 +480,72 @@ EXPECTED 字面量比较，不等即抛异常（EXPECTED 不得从 runner 自己
 ```json
 {"digest_name":"retrieval_config","embedding_protocol_digest":"38acb0b4260a516dffc32680067d5cb55c6c56d09a4d4045ebcda2d289b54af0","empty_or_whitespace_query":"return_empty_without_endpoint_call","index":"exact_brute_force_over_all_corpus_vectors","indexed_documents":"all_chunks_in_canonical_corpus","indexed_text":"Chunk.text","k":20,"match_score":"(raw_score + 1.0) / 2.0","match_score_kind":"cosine_affine_01","payload_version":1,"raw_score":"numerator / (norm_a * norm_b); numerator = math.fsum(a_i * b_i); norm = sqrt(math.fsum(x_i * x_i))","raw_score_kind":"cosine","relevance":"(raw_score + 1.0) / 2.0","relevance_kind":"cosine_affine_01","retrieval_variant":"vector","return_filter":"none_by_sign_return_min_k_corpus_size","total_order":"core.contracts.retrieval_order_key(raw_score, corpus_ordinal)"}
 ```
+
+---
+
+## 16. Amendment 2026-10-02 · HYBRID BASELINE（写于任何 hybrid 融合结果之前）
+
+- 依据：DECISIONS 2026-10-02 "S8 hybrid protocol human decision"（人工裁决 H1–H10）。§13 中 `HYBRID_BASELINE_READY = NO` 的三个未冻结项
+  （RRF constant、per-route fusion depth、embedding dependency）由本节关闭；§13 原文不回改。
+- `PREREG_BEFORE_RESULTS = YES`：写作时仓库中不存在 hybrid 实现，没有产生任何 hybrid 融合结果或 hybrid 指标。
+  两路 component 结果（BM25 / vector）此前已分别公开记录于 DECISIONS。
+
+### 16.1 输入（FROZEN；EXPECTED 抄自 DECISIONS component closure 条目，不由被检文件自算）
+
+| route | artifact | sha256 | evidence commit | 产出代码 commit | retrieval_config_digest |
+|---|---|---|---|---|---|
+| bm25 | `experiments/m1c_s8_bm25/s8_bm25_results.jsonl` | `9ce4df232af8c395e0749dcb2fd9c84e5376a7939ae20af7005b12d54dac3ba8` | 56c5990 | `3511aa072be3b6a1e3551017418ebda8e5d5ed8d` | `3069070a…`（§10.2） |
+| vector | `experiments/m1c_s8_vector/s8_vector_results.jsonl` | `0e80682cfded9fb73db0b9204120582984f33604ab5bfbc88694d47f9d371073` | 5b5a7ef | `1a7c6749ba844e33f3237625c4e21f18c3d77c1e` | `c9c3868c…`（§15.5） |
+
+- 运行前校验（任一不符 → 不产出结果）：两份 artifact sha 等于上表；两份 run identity 的 `retrieval_variant` / `code_commit` / `retrieval_config_digest` 等于上表；
+  两份的 `contracts_version`、`contracts_sha256`、corpus / testset / GoldChunkMap sha、query / metric / total-order digest 彼此相同且等于当前冻结值；
+  两份的 question_id 序列都等于冻结评测集文件顺序（39 / 39）。
+- 不重新检索：每路 hit 由 artifact 行重建为 `RetrievalResultRecord`（chunk 按 corpus_ordinal 取自 canonical corpus，且 chunk.id 必须等于 chunk_id）；
+  重建记录的 `retrieval_record_json_object` 必须与保存的 hit 对象逐字段相等（无损）；每路序列必须通过 `validate_retrieval_records(k=20)`。
+
+### 16.2 融合（FROZEN）
+
+- routes = bm25、vector；unweighted（1 : 1）；`RRF_K = 60`；route rank = 该 chunk 在该路已保存排序中的 **1-based** 位置。
+- per-route fusion depth = bm25 20 / vector 20；某路少于 20 条 → 用其实际返回的全部记录，不 padding（BM25 的 ML01 为 0 条：该题只有 vector 一路）。
+- candidate set = 两路 top-depth 记录的并集（同一 chunk 在两路必须是同一 corpus_ordinal 与同一 Chunk）。
+- `raw_score(d) = Σ_{d 出现的路} Fraction(1, 60 + rank_route(d))`，exact `fractions.Fraction`，不用 float 累加；序列化 `"p/q"`
+  （`core.contracts.retrieval_record_json_object`）；`raw_score_kind = "rrf_k60_2route"`。
+- `relevance = float(raw_score / Fraction(2, 61))`；`relevance_kind = "rrf_normalized_2route_k60"`。两路都排第 1 → 1.0；单路第 1 → 0.5；
+  单路第 20 → 61/160 = 0.38125。relevance 是 raw_score 的单调不减函数（Fraction → float 正确舍入），不参与排序。
+- `match_score = max(d 实际出现的各路已保存 match_score)`；不做 cross-route rescoring；`match_score_kind = "max_present_route_match_score"`；不参与排序。
+  已知语义（写于结果之前）：对只在一路出现的 chunk，它是"所有路 max"的下界 —— 缺失路的分数未知且不计算。两路 match_score 的 kind 不同
+  （bm25_saturation / cosine_affine_01），取 max 是 H8 的裁决，不是同口径比较的结论；MIN_RELEVANCE 校准仍属 S9。
+- 全序：`core.contracts.retrieval_order_key(raw_score, corpus_ordinal)`；返回前 20；每题通过 `validate_retrieval_records(k=20)`。
+  不得用 route 偏好、chunk_id 字典序、插入顺序或 dict / set 顺序打破 tie。
+- 实现：`components/retrievers/hybrid.py` 只依赖 `core.contracts` 与标准库；不读语料、评测集、GoldChunkMap；不调用 BM25 / vector / Ollama。
+
+### 16.3 结果 artifact
+
+- 文件：`experiments/m1c_s8_hybrid/s8_hybrid_results.jsonl`（normative，首行 run identity）、`s8_hybrid_metrics.json`、`s8_hybrid_run.log`。
+- 逐题对象（hybrid）：§9.2 的冻结字段顺序之后追加 `route_diagnostics`；`hits` 仍为 `retrieval_record_json_object`。
+  `route_diagnostics[i]` 对应 `hits[i]`：
+  `{"hybrid_rank", "chunk_id", "corpus_ordinal", "raw_score", "relevance", "match_score", "bm25": {"present", "rank", "raw_score", "match_score"}, "vector": {同左}}`；
+  某路未出现 → `present = false`，其余三项 null；route 的 raw_score / match_score 是该路 artifact 中保存的原值。
+- hybrid run identity 键序（FROZEN）：§9.1 的 15 个键（`retrieval_variant = "hybrid"`，`retrieval_config_digest` = 16.5）之后依次追加
+  `hybrid_protocol_commit, hybrid_implementation_commit, hybrid_implementation_sha256, prereg_sha256, bm25_input_results_sha256,
+  bm25_input_code_commit, bm25_retrieval_config_digest, vector_input_results_sha256, vector_input_code_commit, vector_retrieval_config_digest,
+  rrf_k, route_fusion_depth, route_weights`。
+  `prereg_sha256` = 本文件在 hybrid protocol commit 中的字节 sha；运行时文件必须与之相同。
+- run identity 写在任何结果之前（log 第一条事件 + results 第 1 行）。Run A / Run B：两个全新进程（PYTHONHASHSEED 不同），normative artifact 逐字节相同，否则结果不得使用。
+
+### 16.4 指标
+
+- 与 BM25 / vector 同口径（§7、§15.4）：ANY_GOLD / GOLD_COVERAGE / ALL_MAPPED_GOLD @1/2/3/5/20（31 题 macro）、English 28、micro 诊断、first_gold_rank、
+  gold_ranks、multilingual 逐题（ML01 / ML02 / ML03）与 pair 描述、refuse / trap 逐题诊断。ALL_MAPPED_GOLD 仍只是 strict map-union diagnostic。
+- 指标只由保存的 hybrid top-20 + sha 绑定的冻结输入纯函数重算；另由不 import runner 的独立代码复算 headline。
+- `TEST_SET_TUNING_PERFORMED` 必须为 NO：结果产生后不得改 RRF_K、route depth、route weights、relevance、match_score、全序或 top-k，不得重跑挑参数。
+- 本节不做失败归因、不做 reranker 决策、不做 packing 测量；hybrid 是 fixed-k retrieval baseline，不读取 MAX_PROMPT_TOKENS /
+  PROMPT_OVERHEAD_RESERVE_TOKENS / CONTEXT_PACK_MARGIN / CONTEXT_PACK_BUDGET_TOKENS / CHARS_PER_TOKEN_EST / TOP_K_CONTEXT（D3 / D15）。
+
+### 16.5 冻结 payload 与期望 digest（算法同 §10.1）
+
+`retrieval_config_digest`（hybrid）= `97ddd20aa9f4e837f188c7c6eb29c5eaa400544b5b2eff367c8e0eed4425e621`（1244 bytes）
+
+```json
+{"candidate_set":"union_of_route_top_depth_records","digest_name":"retrieval_config","fusion":"unweighted_reciprocal_rank_fusion","k":20,"match_score":"max(saved_match_score_of_present_routes)","match_score_kind":"max_present_route_match_score","missing_route_rescoring":false,"payload_version":1,"raw_score":"sum_over_present_routes_of_Fraction(1, rrf_k + route_rank)","raw_score_kind":"rrf_k60_2route","raw_score_representation":"fractions.Fraction","raw_score_serialization":"p/q","relevance":"float(raw_score / Fraction(2, 61))","relevance_kind":"rrf_normalized_2route_k60","retrieval_variant":"hybrid","route_diagnostics":"per_hit_present_rank_raw_score_match_score_for_each_route","route_fusion_depth":{"bm25":20,"vector":20},"route_inputs":"frozen_component_top20_artifacts_no_re_retrieval","route_rank":"1_based_position_in_route_saved_ranking","route_retrieval_config_digests":{"bm25":"3069070aad6aec04259313c0242a251c191808f53cde574cf6534529034b8a2e","vector":"c9c3868cf19a77d2b88a705580367ba933930af28c265887d2da6aad7a0e7343"},"route_weights":{"bm25":1,"vector":1},"routes":["bm25","vector"],"rrf_k":60,"short_route":"use_all_returned_records_no_padding","total_order":"core.contracts.retrieval_order_key(raw_score, corpus_ordinal)"}
+```
