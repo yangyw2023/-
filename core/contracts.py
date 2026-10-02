@@ -93,13 +93,13 @@ from typing import Callable, Literal, Mapping, Protocol, Sequence
 # ==============================================================================
 
 # 【整个可执行契约模块（本文件）的版本】（人工裁决 CONTRACT_VERSION_DECISION = SPLIT，DECISIONS 2026-10-01
-# final protocol closure）。每个 `contract:` commit 都递增它（历史: 0.2.0 / 0.3.0 / 0.3.1 / 0.4.0 各对应一个
+# final protocol closure）。每个 `contract:` commit 都递增它（历史: 0.2.0 / 0.3.0 / 0.3.1 / 0.4.0 / 0.4.1 各对应一个
 # contract commit）；任何影响 Chunk 结构或引用语义的改动当然也在其中。
 # 用途: 索引包与运行时的一致性校验依据（见 IndexManifest；约定 9 岸船共用同一份本文件），以及 artifact 的 provenance。
 # ⚠️ 它【不】决定派生 artifact 是否失效 —— 失效由 artifact 实际依赖的语义版本决定。
 #    GoldChunkMap 的兼容判定用 GOLD_CHUNK_MAP_SEMANTICS_VERSION，不用本值；
 #    只改检索语义的版本递增不得使 GoldChunkMap 失效。
-CONTRACTS_VERSION = "0.4.0"
+CONTRACTS_VERSION = "0.4.1"
 
 # 【GoldChunkMap 语义版本】citation → chunk 投影的兼容判定依据（validate_gold_chunk_map）。
 # 拆分自 CONTRACTS_VERSION（0.4.0 起）；取值沿用拆分前最后一个契约版本，因此 0.3.1 生成的映射语义上即本版本。
@@ -280,18 +280,17 @@ PARTIAL_MIN_ELEMENT_HIT_RATIO: float = 0.60
 # ---- 语料 ----
 CORPUS_LANG_DEFAULT: str = "en"
 
-
-# ==============================================================================
-# 阈值（二）⚠️ 未校准 —— 当前值是猜的，尚无实测依据
-#
-# 本节与上一节【物理分开】是刻意的。
-# 纪律一: 任何进入契约的数字，必须有一次实测或一次真实数据勘察作为依据。
-# 本节的值还不满足这一条，因此单列，让误用在视觉上就显眼。
-# ==============================================================================
-
+# ---- 拒答阈值 ----
 # [L2] owner_experiment: M1c（用检索分数分布校准）
-# ⚠️ 0.35 是【猜的】。M1c 之前不得用它下任何结论。
-# 目标: 陷阱题的最高检索分落在阈值之下，可答题的 gold chunk 分数落在阈值之上。
+# 来源: S9 MIN_RELEVANCE calibration（2026-10-02；DECISIONS "S9 MIN_RELEVANCE calibration result"）。
+#   状态 PROVISIONAL_SAME_SET_CALIBRATED。hybrid gate_score = max(match_score over top-20)：
+#   7 道计分陷阱 ≤ 0.7792718520928508，31 道可答题 ≥ 0.8012534982161421；人工取值 0.78。
+#   同集 7/7 计分陷阱拒答、0/31 可答题误拒；规则留一 6/7（失败 = TR01）。
+# ⚠️ 经验操作阈值（empirical operating threshold），不是概率 / calibrated confidence / gold 置信度，
+#   不可跨 retriever 移植。falsified_if: hybrid 打分语义、生产检索路径、reranker 进入 score / gating、
+#   match_score 构造任一改变；或代表性校准数据显示不可接受的可答题误拒 / 陷阱误放 → 须重校。
+# 目标: 陷阱题的最高检索分落在阈值之下，可答题的判定量（max match_score）落在阈值之上；
+#   gold chunk 分数只作诊断（S9 协议 S9-D2）。
 #
 # ⚠️ 已知效度隐患（M2 汇报时必须标注）:
 #   计划用同一批 39 题的检索分数分布来校准本值，而 M2 又用同一批题测拒答表现
@@ -325,7 +324,16 @@ CORPUS_LANG_DEFAULT: str = "en"
 #        若作用在打包后的集合上，预算把好证据挤掉会被误读成"语料里没有证据"——
 #        两种完全不同的失败会记成同一种。
 #        被预算挤掉的情况有 failure_tag="context_truncation" 专门接着。
-MIN_RELEVANCE: float = 0.35
+MIN_RELEVANCE: float = 0.78
+
+
+# ==============================================================================
+# 阈值（二）⚠️ 未校准 —— 当前值是猜的，尚无实测依据
+#
+# 本节与上一节【物理分开】是刻意的。
+# 纪律一: 任何进入契约的数字，必须有一次实测或一次真实数据勘察作为依据。
+# 本节的值还不满足这一条，因此单列，让误用在视觉上就显眼。
+# ==============================================================================
 
 # 非 chunk 部分的 prompt 开销预留。[L2] owner_experiment: M1c
 #

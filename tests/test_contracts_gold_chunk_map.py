@@ -220,7 +220,7 @@ class TestOrderInvariance(unittest.TestCase):
 class TestContractConstants(unittest.TestCase):
 
     def test_version(self):
-        self.assertEqual(contracts.CONTRACTS_VERSION, "0.4.0")
+        self.assertEqual(contracts.CONTRACTS_VERSION, "0.4.1")
         self.assertEqual(contracts.GOLD_CHUNK_MAP_SEMANTICS_VERSION, "0.3.1")
 
     def test_match_level_enum(self):

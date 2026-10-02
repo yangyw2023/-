@@ -134,8 +134,8 @@ class TestLayer1CanonicalFrozenMap(unittest.TestCase):
         self.assertEqual(hashlib.sha256(read_canonical_bytes()).hexdigest(), EXPECTED_CANONICAL_MAP_SHA256)
 
     @unittest.skipUnless(os.path.isfile(CORPUS_PATH), "canonical corpus 不在场（gitignored）")
-    def test_tv3_canonical_legacy_map_accepted_under_0_4_0(self):
-        self.assertEqual(contracts.CONTRACTS_VERSION, "0.4.0")
+    def test_tv3_canonical_legacy_map_accepted_under_current_contracts(self):
+        self.assertEqual(contracts.CONTRACTS_VERSION, "0.4.1")
         gold_map = parse_map(read_canonical_bytes())
         self.assertEqual(gold_map.contracts_version, "0.3.1")
         self.assertNotEqual(gold_map.contracts_version, contracts.CONTRACTS_VERSION)

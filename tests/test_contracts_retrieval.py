@@ -221,14 +221,22 @@ class TestScoreSemanticDistinction(unittest.TestCase):
         self.assertEqual(relevances, sorted(relevances, reverse=True))
 
     def test_numeric_contract_unchanged(self):
-        """本轮只追加检索语义，不动任何数值常量。"""
+        """除 S9 校准的 MIN_RELEVANCE（0.35 → 0.78，contracts 0.4.1）外，本测试保护的数值契约未变。"""
         self.assertEqual(
             (contracts.MAX_PROMPT_TOKENS, contracts.PROMPT_OVERHEAD_RESERVE_TOKENS,
              contracts.CONTEXT_PACK_MARGIN, contracts.CONTEXT_PACK_BUDGET_TOKENS,
              contracts.CHARS_PER_TOKEN_EST, contracts.TOP_K_CONTEXT, contracts.TOP_K_RETRIEVE,
              contracts.BM25_SCORE_SATURATION, contracts.MIN_RELEVANCE, contracts.TTFT_BUDGET_S),
-            (1050, 200, 0.90, 765, 4, 5, 20, 10.0, 0.35, 10.0),
+            (1050, 200, 0.90, 765, 4, 5, 20, 10.0, 0.78, 10.0),
         )
+
+    def test_min_relevance_strict_boundary(self):
+        """runtime 判定: score < MIN_RELEVANCE → 拒答；score == MIN_RELEVANCE → 不拒答（S9 校准边界值）。"""
+        trap_max, answer_min = 0.7792718520928508, 0.8012534982161421
+        self.assertEqual(contracts.MIN_RELEVANCE, 0.78)
+        self.assertTrue(trap_max < contracts.MIN_RELEVANCE)
+        self.assertFalse(0.78 < contracts.MIN_RELEVANCE)
+        self.assertFalse(answer_min < contracts.MIN_RELEVANCE)
 
 
 class TestT1CorpusOrdinalZeroBased(unittest.TestCase):
