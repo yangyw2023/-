@@ -4447,3 +4447,83 @@ hybrid top-20 candidate miss = 0 / 31。
 - QA PASS：每路 31 / 8 / 39；window 数 = 有结果的题数；每个 packed 序列都是该题冻结 top-20 的有序前缀；opportunity 独立重算一致；冻结 retrieval artifact 字节未变。
 - `RERANKER_PREREQUISITE_STATUS = SATISFIED`；`RERANKER_L1_DECISION = PENDING`；`TOP_K_RETRIEVE_L1_DECISION = PENDING`；**`S8_OVERALL_STATUS = OPEN`**；
   `NEXT_STEP = RERANKER_L1_DECISION`。
+
+
+## 2026-10-02 · S8 reranker / candidate-depth L1 decisions
+
+人工裁决（Arya）D-R1–D-R5，在 real-window measurement（b409b41）之后作出；本条由 AI 按裁决落地。逐项核对执行手册 S8.5、实施方案 §11.3 / §13.1、
+M1c prereg §7.5 / §11、DECISIONS D2 与 prerequisite 条目、contracts Reranker docstring：**无直接冲突**。prereg 与 contracts 未改。
+
+### [L2] A. K_CONTEXT（D-R1）
+
+- **决策：`K_CONTEXT_SELECTION_RULE = COMMON_REAL_WINDOW_MEDIAN_AND_MODE`；`K_CONTEXT = 2`。**
+- 依据：real-window measurement 已完成；BM25 / vector / hybrid 的 realized-k 中位数都是 2、众数都是 2，三路都没有 k = 1；因此 2 是不依赖最终 route 选择的共同
+  current-executable-contract operating point。与实施方案 §13.1 对 1050 预算的 k_context = 2 描述一致，但本裁决依据的是新的 real-window measurement，不是旧推算。
+- falsified_if：numeric token contract 改变并使三路 realized-k operating point 不再支持 2；production retrieval / window semantics 改变。
+
+### [L2] B. 主指标（D-R2）
+
+- **决策：`RERANKER_RECALL_METRIC = ANY_GOLD`。** reranker L1 问的是融合排序是否把至少一个 frozen gold chunk 推进实际可见的 context window。
+  GOLD_COVERAGE、ALL_MAPPED_GOLD 只作 diagnostics，不得替换为 primary gate。
+
+### [L2] C. 判据方法（D-R3）
+
+- **决策：`RERANKER_NUMERIC_THRESHOLD = NONE`；`RERANKER_DECISION_METHOD = AUTHORITY_QUALITATIVE_CASE_CLASSIFICATION`。**
+  按 authority 原文（实施方案 §11.3 / §13.1、执行手册 S8.5、contracts Reranker docstring）分类：
+  CASE A：Recall@k_context ≈ Recall@20 → `NO_MATERIAL_RERANK_HEADROOM`；
+  CASE B：Recall@20 高但 Recall@k_context 明显低 → `RERANKER_EVALUATION_WARRANTED_SUBJECT_TO_LATENCY`；
+  CASE C：Recall@20 本身低 → `RECALL_LIMITED_RERANKER_NOT_USEFUL`。
+- 不借用 M2 的 ≥ 6/31（实施方案 §13.2 / §14.4，属 answer-correctness / McNemar 语境）作为 retrieval threshold；不把"≈""明显低"泛化成永久数值阈值。
+  D2 的 `RERANKER_DECISION_THRESHOLD = NOT_YET_FROZEN` 由本条以"无数值阈值、按原文定性分类"关闭。
+
+### [L1] D. Hybrid 分类（`MEASURED` 输入，人工分类）
+
+- 决策 route = HYBRID（authority 判据针对融合排序）；BM25 / vector 为 diagnostic。
+- Hybrid ANY_GOLD@2 = 22/31（0.710）；ANY_GOLD@20 = 31/31（1.000）；差距 9/31（≈ 0.290）。人工裁决：不属于"≈"；ANY@20 = 31/31 不属于"Recall@20 本身低"
+  → **`RERANKER_CASE = CASE_B`**。
+- real-window opportunity（gold 在 top-20 但第一个 gold 排在该题 realized k 之后）：hybrid 8/31（CD03、CN02、CN04、FL14、ML02、PR01、PR03、PR04）；
+  vector 3/31。opportunity 不等于 reranker 的保证收益。
+- diagnostics（`DIAGNOSTIC_ONLY = YES`）：hybrid GOLD_COVERAGE 0.609 → 0.952、ALL_MAPPED_GOLD 16/31 → 28/31；vector ANY 27/31 → 30/31；BM25 ANY 17/31 → 27/31。
+- 失败归因背景（只作解释，不重新归因）：hybrid rank 3–20 的 9 题中 PR03 / PR04 = chunk_boundary，FL14 = vector_miss，ML02 = bm25_miss，
+  CN02 / CN04 / PR01 / CD03 = NO_RETRIEVAL_FAILURE，FL04 不在审核包；fusion_miss = 0。
+
+### [L1] E. reranker L1 决策（D-R4）
+
+- **决策：`RERANKER_L1_DECISION = EVALUATE_RERANKER_SUBJECT_TO_LATENCY`。** 当前 M1c evidence 显示存在 material ranking headroom，reranker 值得进入后续候选评估；
+  authority 的"值得试，但须过延迟预算"原样保留。
+- 不等于：已决定 production 必须使用 reranker；已证明 reranker 能恢复全部 9 题；已决定 M2 一定包含 reranker；已通过 latency budget；已测 reranker latency。
+  不写 INTRODUCE，也不写 DO_NOT_INTRODUCE；reranker 仍不进入架构图，`EvalItemResult.reranker` 仍为 "none"（contracts Reranker docstring）。
+- falsified_if：实际 reranker 无法改善 frozen opportunity population；reranker latency / memory 成本超出后续冻结的业务约束；numeric token contract 改变后
+  reranking headroom 不再 material；未来代表性语料不复现该 ranking gap。
+
+### [L1] F. TOP_K_RETRIEVE（D-R5）
+
+- **决策：`TOP_K_RETRIEVE_L1_DECISION = KEEP_20_FOR_CURRENT_M1C`。** 依据：hybrid top-20 中 31/31 道可答题至少有一个 frozen gold；hybrid candidate miss 0/31；
+  人工失败归因 fusion_miss = 0。对当前冻结 39 题评测集、当前 hybrid candidate generation、当前 M1c，没有 evidence 要求把 TOP_K_RETRIEVE 从 20 调大。
+  不表示 20 普遍足够；常量未改。
+- falsified_if：未来评测出现 hybrid top-20 candidate miss；production 语料分布实质变化；reranker 需要不同的 candidate depth；latency / memory 约束要求更小的 k。
+
+### G. 其他边界
+
+- 候选替代证据敏感性：`RERANKER_DECISION_SENSITIVE_TO_ALTERNATIVE_EVIDENCE = NO`（hybrid top-2 = 22 与 @20 = 31 在三个候选下不变）。GoldChunkMap 未改。
+- `TOKEN_ESTIMATOR_FALSE_SAFE_OBSERVED = YES`（hybrid TR03，见 prerequisite 条目 D）：属 numeric token-contract / S4a.9d evidence，不是 reranker blocker；预算未改。
+  `TTFT_BUDGET_10S_STATUS = BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED`；180 s = `EXPLORATORY_UPPER_BOUND_ONLY`。
+
+### H. CD01 → M2 预注册 handoff
+
+- 执行手册 S8.4 要求 CD01 观察写进 M2 预注册「预期最可能结果」；正式 M2 预注册尚未创建（只有 TEMPLATE），本轮不创建。
+- 已建 handoff：`experiments/m1c_s8_handoff/m2_prereg_handoff.md`（`b350c4bdcdd9d7bdf3dc02f6632b992fe547505493c05c106e26ed79f5740fef`）—— 检索归因 NO_RETRIEVAL_FAILURE；三路 realized k 2 / 2 / 2；packed gold coverage
+  1/5 / 1/5 / 1/5；ERM 侧 gold 未进入当前 packed context；风险在 packing / context availability；numeric contract 未冻结，不作 production claim。
+  `CD01_M2_HANDOFF = CREATED`；正式写入待 M2 预注册创建时完成。
+
+### I. models.yaml GATE-E3 bookkeeping
+
+- 执行手册 S8.4 要求把多语种检索数字填进 `experiments/models.yaml` 的 `gate_e3_evidence`；当前 bge-m3 条目 `gate_e3_evidence: null`、`gate_e3_multilingual: TODO`。
+- GATE-E3 是硬门（实施方案 §12.7："该语言的查询能否召回正确的英文 chunk"），PASS / FAIL 是人工判断 → `GATE_E3_HUMAN_DECISION_REQUIRED = YES`。
+  本轮未修改 models.yaml。拟填 evidence（来源 `s8_vector_metrics.json` aa404fa9…，vector evidence commit 5b5a7ef）：
+  vector first_gold_rank ML01（zh）= 2、ML02（tl）= 1、ML03（hi）= 2；三题 ANY_GOLD@2 = 3/3、@1 = 1/3；English 28 题 ANY_GOLD@1 / @2 / @20 = 19/28 / 24/28 / 27/28；n = 3，不外推。
+
+### 状态
+
+- `FAILURE_ATTRIBUTION = CLOSED`；`RERANKER_PREREQUISITE_STATUS = SATISFIED`；`RERANKER_L1_DECISION = EVALUATE_RERANKER_SUBJECT_TO_LATENCY`；
+  `TOP_K_RETRIEVE_L1_DECISION = KEEP_20_FOR_CURRENT_M1C`；**`S8_OVERALL_STATUS = OPEN`**（剩余：GATE-E3 人工判断与 models.yaml 记账；S8 收尾）。
