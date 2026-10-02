@@ -413,3 +413,70 @@ EXPECTED 字面量比较，不等即抛异常（EXPECTED 不得从 runner 自己
 ## 14. 本实验不回答的问题
 
 - 答案质量（M2）；检索参数调优、metadata augmentation、融合权重（M5）；MIN_RELEVANCE 取值（S9）；船端 runtime 与 TTFT（M6）。
+
+
+---
+
+## 15. Amendment 2026-10-02 · VECTOR BASELINE（写于任何 vector 检索结果之前）
+
+- `PREREG_BEFORE_RESULTS = YES`：写作时没有任何 vector 检索结果、vector Recall 或语料 embedding 评测；仓库中没有 vector retriever 实现。
+- 依据：DECISIONS 2026-10-02「S8 embedding protocol probe evidence」（测量）与「S8 vector embedding protocol human decision」（人工裁决 D-V1–D-V10）。
+- 本节冻结 vector baseline；§1–§14 的 BM25 内容不变。共享不变的冻结项：query protocol（§2，`query_protocol_digest = e26afbf3…`）、
+  indexed text（§3：`Chunk.text` only）、全序（§4，`total_order_protocol_digest = 99c87596…`）、指标与分母（§7，`metric_protocol_digest = e78d361f…`）、
+  known limitations（§8）、结果 schema（§9.2 逐题字段顺序、rank 1-based、corpus_ordinal 0-based、首行 run identity、Run A == Run B）。
+
+### 15.1 embedding protocol（FROZEN）
+
+| 项 | 值 |
+|---|---|
+| model | `bge-m3:latest`；blob `sha256:daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c`；manifest `7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab` |
+| dimension | 1024 |
+| runtime | Ollama server 0.34.0 / client 0.23.1（models.yaml 的 0.33.3 为历史记录） |
+| endpoint | `POST /api/embed`，request `{"model": "bge-m3:latest", "input": <str 或 list>, "truncate": false}`，只读响应 `embeddings`；不用 legacy `/api/embeddings` |
+| execution path | `MAC_DEFAULT_METAL`；不设 `num_gpu` 或任何 options；语料与 query 同一路径 |
+| prefix | query `""`；document `""` |
+| document text | `Chunk.text`（与 BM25 相同） |
+| 存储值 | 按 /api/embed JSON 解析得到的 float64 原值，不做任何变换 |
+| 空 / 全空白 query | 返回 []，不调用 endpoint |
+
+`SHIP_X86_EQUIVALENCE = NOT_MEASURED`；`M6_SHIP_CPU_VALIDATION = REQUIRED_LATER`。不得在 v5.3 上比较不同 model / prefix / 执行路径后择优。
+
+### 15.2 打分、全序与返回（FROZEN）
+
+- `raw_score = numerator / (norm_a · norm_b)`，`numerator = math.fsum(a_i · b_i)`，`norm = sqrt(math.fsum(x_i · x_i))`；`raw_score_kind = "cosine"`。不以点积代替 cosine。
+- `match_score = (raw_score + 1.0) / 2.0`，`match_score_kind = "cosine_affine_01"`；`relevance = match_score`，`relevance_kind = "cosine_affine_01"`。
+  若浮点舍入使 match_score 越出 [0, 1]，RetrievalResultRecord 校验报错（fail-closed），不做截断。
+- 全序：`retrieval_order_key(raw_score, corpus_ordinal)`，raw_score 降序，精确相等时 corpus_ordinal 升序。
+- 不按 cosine 正负过滤；非空 query 返回 min(k, 3409) 条；k = 20，保存完整 top-20。
+- 索引：对全部语料向量精确暴力计算（无 ANN / 向量库）。
+
+### 15.3 语料 embedding artifact
+
+- `experiments/m1c_s8_vector/corpus_embeddings.npy`：float64，shape (3409, 1024)，第 i 行 = canonical `corpus/chunks.jsonl` 第 i 行（0-based）；
+  `corpus_embeddings.meta.json` 记录 corpus sha、行数、维度、dtype、chunk id 顺序摘要、model / manifest / runtime / endpoint / truncate / 执行路径 / prefix、
+  embedding_protocol_digest 与 .npy sha256。生成后对固定子集用两个全新进程重新 embedding，必须与已存行逐位相同。
+
+### 15.4 指标与结果
+
+- 与 BM25 同口径（§7）：ANY_GOLD / GOLD_COVERAGE / ALL_MAPPED_GOLD @1/2/3/5/20（31 题 macro）、English 28、first_gold_rank、gold_ranks、
+  multilingual 逐题（ML01 / ML02 / ML03）与 pair 描述、refuse / trap 逐题诊断。ALL_MAPPED_GOLD 仍只是 strict map-union diagnostic。
+- 结果文件：`experiments/m1c_s8_vector/s8_vector_results.jsonl`（normative，首行 run identity）、`s8_vector_metrics.json`、`s8_vector_run.log`。
+- vector run identity 键序（FROZEN）：§9.1 的 15 个键（`retrieval_variant = "vector"`）之后依次追加
+  `embedder_model_tag, embedder_model_blob_digest, embedder_manifest_sha256, embedding_dimension, embedding_protocol_digest,
+  corpus_embeddings_sha256, ollama_server_version, ollama_client_version, embedding_execution_path`。
+- Run A / Run B：两个全新进程，normative artifact 逐字节相同，否则结果不得使用。`TEST_SET_TUNING_PERFORMED` 必须为 NO。
+- 本节不包含 packing 测量；如需，可从保存的 top-20 另行重算。
+
+### 15.5 冻结 payload 与期望 digest（算法同 §10.1）
+
+`embedding_protocol_digest` = `38acb0b4260a516dffc32680067d5cb55c6c56d09a4d4045ebcda2d289b54af0`（689 bytes）
+
+```json
+{"digest_name":"embedding_protocol","dimension":1024,"document_prefix":"","document_text":"Chunk.text","endpoint":"POST /api/embed","execution_path":"MAC_DEFAULT_METAL","manifest_sha256":"7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab","model_blob_digest":"sha256:daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c","model_tag":"bge-m3:latest","options":"none_no_num_gpu_override","payload_version":1,"query_prefix":"","request":{"input":"str_or_list","model":"bge-m3:latest","truncate":false},"response_field":"embeddings","runtime":{"ollama_client":"0.23.1","ollama_server":"0.34.0"},"stored_vector_values":"float64_exactly_as_parsed_from_api_embed_json"}
+```
+
+`retrieval_config_digest`（vector）= `c9c3868cf19a77d2b88a705580367ba933930af28c265887d2da6aad7a0e7343`（808 bytes）
+
+```json
+{"digest_name":"retrieval_config","embedding_protocol_digest":"38acb0b4260a516dffc32680067d5cb55c6c56d09a4d4045ebcda2d289b54af0","empty_or_whitespace_query":"return_empty_without_endpoint_call","index":"exact_brute_force_over_all_corpus_vectors","indexed_documents":"all_chunks_in_canonical_corpus","indexed_text":"Chunk.text","k":20,"match_score":"(raw_score + 1.0) / 2.0","match_score_kind":"cosine_affine_01","payload_version":1,"raw_score":"numerator / (norm_a * norm_b); numerator = math.fsum(a_i * b_i); norm = sqrt(math.fsum(x_i * x_i))","raw_score_kind":"cosine","relevance":"(raw_score + 1.0) / 2.0","relevance_kind":"cosine_affine_01","retrieval_variant":"vector","return_filter":"none_by_sign_return_min_k_corpus_size","total_order":"core.contracts.retrieval_order_key(raw_score, corpus_ordinal)"}
+```

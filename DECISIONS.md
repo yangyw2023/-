@@ -3918,3 +3918,109 @@ canonical GoldChunkMap `8cf9f3be…`、report `f48018cb…`；`CONTRACTS_VERSION
   `s8_bm25_metrics.json`（`019f6ee850bcb4788aa48d32807ccc1d61c2a570343104674004c5b37529b339`）、
   `s8_bm25_packing.json`（`81fedf9fd7ad2a0ba46a128a8c6fbe449a2131216bb9a8e5c482164eebb65313`）、
   `s8_bm25_run.log`（`91412c65bb5988e44651a7b7f2bbac6e89df47bb1302eb99667322872264ce3a`）。
+
+
+## 2026-10-02 · S8 embedding protocol probe evidence（apply for review）
+
+本条只记录 `S8_EMBEDDING_PROTOCOL_PROBE`（D12 指定的单独一轮）的测量与提案；不做任何人工裁决，不实现 vector，不生成语料 embedding，不跑检索。
+`S8_OVERALL_STATUS = OPEN`；`VECTOR_BASELINE_READY = NO`。证据：`experiments/m1c_embedding_probe/`（probe 脚本、CPU 补充脚本、log、json）。
+探针字符串与语料抽样规则在任何 embedding 调用前写入 log 头；未读评测集、未读 GoldChunkMap、未算任何检索指标。
+
+### [L3] MEASURED
+
+- 模型：`bge-m3:latest`；manifest sha256 `7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab`；model blob
+  `sha256:daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c`（1,157,671,200 B）；bert / F16 / 566.70M；embedding_length 1024；
+  context_length 8192；pooling_type 2。与 D12 一致。
+- runtime：Ollama server 0.34.0（client 0.23.1）；models.yaml `rt-2026-09-08` 记 0.33.3 → `RUNTIME_IDENTITY_DRIFT = YES`（未降级、未改 yaml）。
+- endpoint：`POST /api/embed`（`input` 可为 str 或 list，响应字段 `embeddings`）可用；legacy `POST /api/embeddings`（`prompt`，响应 `embedding`）也可用，
+  方向相同（cosine 1.0）但不归一化（norm ≈ 25）。
+- 维度：全部非空输入 1024，= embedding_length → `DIMENSION_GATE = PASS`；全部有限，无零向量。
+- 归一化：`/api/embed` 返回单位向量（|‖v‖ − 1| ≤ 6.4e-7，float32 舍入量级）→ `RAW_EMBEDDING_NORMALIZATION = UNIT`（该 endpoint）。
+- 单条 vs 批量：逐位相同（8 / 8）→ `SINGLE_BATCH_EQUIVALENCE = EXACT`。
+- Run A / Run B（全新进程、模型重新加载）：默认路径与 CPU 强制路径各自逐位相同 → `EMBEDDING_RUN_REPEATABILITY = BYTE_IDENTICAL`。
+- 执行路径：默认 = 100% GPU（Metal，size_vram = size）；`options.num_gpu = 0` = 100% CPU（size_vram = 0）。**两条路径的向量不逐位相同**
+  （max_abs_diff ≤ 4.0e-4，cosine ≥ 0.999993）。`SHIP_X86_EQUIVALENCE = NOT_MEASURED`（开发机 Mac ≠ 船端 x86）。
+- 空输入：`""` → 返回 0 个向量（非错误）；`"   "` → 正常单位向量。
+- 截断：最长 canonical chunk（`FMM:p130:2`，1515 字符）= 210 prompt tokens，`truncate=false` 与 `true` 结果相同 → 语料无截断风险。
+- prefix 行为：仓库无 query / document prefix 的 authority。候选 query 前缀（BGE v1.5 惯例句）与原文向量 cosine 0.830 / 0.907，
+  任意 document 前缀 0.953 / 0.951 —— prefix 会实质改变向量。
+- 多语种输入（zh / tl）可被接受并产出有效单位向量；这**不是**跨语言检索质量证据（gate_e3 未测）。
+
+### [L2] PROPOSED（待人工裁决，未生效）
+
+- owner_experiment: S8（vector baseline）
+- endpoint：`POST /api/embed`，body `{"model": "bge-m3:latest", "input": …, "truncate": false}`（截断即报错，fail-closed），只读 `embeddings`。
+- 相似度：raw_score = 精确 cosine = fsum(a·b) / (‖a‖‖b‖)（float64，显式除以范数）；理由是契约已规定 vector RAW_SCORE = 原始 cosine，
+  而端点范数只在 float32 舍入内为 1，不能把点积直接当 cosine。不按检索表现选择。
+- 执行路径：语料与 query 必须用同一路径；倾向 CPU 强制（`num_gpu = 0`），理由：船端目标是 CPU（但仍不等于 x86 等价）。
+- 空 / 全空白 query：按 Retriever 契约在调用 embedder 之前返回 []。
+
+### HUMAN_PENDING（AI 不裁决）
+
+- `MODEL_SELECTION_STATUS = NOT_FROZEN` → `HUMAN_MODEL_SELECTION_REQUIRED = YES`（手册 S8.1 只是倾向 bge-m3，不等于人工裁决）。
+- `QUERY_PREFIX_STATUS = NEEDS_HUMAN_DECISION`；`DOCUMENT_PREFIX_STATUS = NEEDS_HUMAN_DECISION`（实测会改变向量，authority 未裁决）。
+- 执行路径（默认 Metal vs CPU 强制）。
+- `VECTOR_SCORE_PROTOCOL = GAP`（契约已定: match_score = (cos + 1) / 2、RAW_SCORE = 原始 cosine、全序 / tie-break 共用）。最小缺口：
+  vector relevance 定义；vector 的三个 kind 取值；返回过滤（cosine 可为负，BM25 的 raw > 0 规则不适用）；embedding_protocol_digest 的 payload；
+  语料 embeddings artifact 的身份与存放（prereg §9.1 已要求记入 run identity）。
+
+
+## 2026-10-02 · S8 vector embedding protocol human decision
+
+人工裁决（Arya），在任何 vector Recall 产生之前作出；本条由 AI 按裁决落地。上一条 "S8 embedding protocol probe evidence" 的 MEASURED / PROPOSED /
+HUMAN_PENDING 文字不回改，其中的 HUMAN_PENDING 项由本条关闭。作用域：`M1c = development-Mac retrieval comparison`；`M6 = ship-target hardware validation`。
+
+### [L2] D-V1 · embedding model
+
+- owner_experiment: S8 / M1c（vector baseline）
+- **决策：`S8_VECTOR_EMBEDDING_MODEL = bge-m3:latest`**；冻结 artifact：model blob `sha256:daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c`，
+  manifest sha256 `7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab`，dimension 1024。`MODEL_SELECTION_STATUS = FROZEN_FOR_M1C`。
+- 理由：执行手册 S8.1 已将 bge-m3 列为倾向 baseline；probe 证明当前 artifact 可用、英 / 中 / 他加禄语均可编码、维度稳定、single = batch 逐位相同、独立运行确定。
+- 含义只是"bge-m3 = M1c vector baseline model"，**不**表示 bge-m3 是最佳 embedding model。不得在 v5.3 上比较多个 embedding model 后挑 Recall 更高者。
+
+### [L2] D-V2 · endpoint
+
+- owner_experiment: S8 / M1c
+- **决策：`EMBEDDING_ENDPOINT = POST /api/embed`**；request `{"model": "bge-m3:latest", "input": <str 或 list>, "truncate": false}`；只读响应 `embeddings`。
+  legacy `POST /api/embeddings` 不用于 formal vector baseline。
+
+### [L2] D-V3 · prefix
+
+- owner_experiment: S8 / M1c（baseline）/ M5（任何 prefix 消融）
+- **决策：`QUERY_PREFIX = ""`；`DOCUMENT_PREFIX = ""`。** 理由：仓库 authority 未冻结 prefix；probe 证明 prefix 会实质改变 embedding；baseline 不引入未经 authority 冻结的变换。
+  不允许通过 v5.3 Recall 选择 prefix。
+
+### [L2] D-V4 · execution path
+
+- owner_experiment: S8 / M1c（开发机比较）/ M6（船端硬件验证）
+- **决策：`S8_VECTOR_EXECUTION_PATH = MAC_DEFAULT_METAL`；`EMBEDDING_OPTIONS = NO_NUM_GPU_OVERRIDE`。** 语料与 query embedding 都走开发 Mac 上 Ollama 的默认 Metal。
+- 理由（人工）：
+  1. S8 / M1c 的目的是在开发 Mac 上快速、稳定地比较 BM25 / vector / hybrid 的检索质量；
+  2. 老板要求在 Mac 上运行，是为了加速实验与方案比较，不是让 Mac 模拟最终船端硬件；
+  3. probe 实测：默认路径 = Metal GPU，`num_gpu = 0` = CPU；两条路径向量极接近（max_abs_diff ≤ 4.0e-4，cosine ≥ 0.999993）但不逐位相同；两条路径各自确定；
+  4. 执行路径会改变 embedding 字节，所以 formal baseline 必须冻结一个路径；
+  5. 本裁决在看到任何 vector Recall 之前、依据实验目的作出，不是依据检索表现。
+- **`SHIP_X86_EQUIVALENCE = NOT_MEASURED`；`M6_SHIP_CPU_VALIDATION = REQUIRED_LATER`。** 不得声称 Mac Metal == ship CPU，也不得声称 Mac CPU == ship x86。
+- 描述性计时（`MEASURED`，计划先写后跑，**不是**选择依据）：probe 的 8 条输入一次 batch，各 3 次 fresh run —— Metal 冷启动中位 0.98 s / 热 0.13 s；
+  CPU（`num_gpu = 0`）冷 1.95 s / 热 1.20 s。不外推到船端 x86，不形成性能契约。
+
+### [L3] D-V5 · runtime
+
+- **决策：formal vector baseline 使用 Ollama server 0.34.0 / client 0.23.1。** models.yaml 的 0.33.3（`rt-2026-09-08`）视为历史 runtime 记录；不降级、不回改历史证据；
+  formal run identity 记录真实当前 runtime。
+
+### [L2] D-V6 – D-V10 · vector 打分与返回
+
+- owner_experiment: S8 / M1c
+- **D-V6 raw score**：`raw_score = numerator / (norm_a · norm_b)`，`numerator = math.fsum(a_i · b_i)`，`norm = sqrt(math.fsum(x_i · x_i))`；不得以 dot(a, b) 代替 cosine
+  （/api/embed 只在浮点精度内是单位向量，契约定义的是 cosine）。`raw_score_kind = "cosine"`。
+- **D-V7**：`match_score = (raw_score + 1.0) / 2.0`，`match_score_kind = "cosine_affine_01"`；`relevance = match_score`，`relevance_kind = "cosine_affine_01"`
+  （单路 vector 中二者数值相同，字段语义仍分开）。
+- **D-V8 全序**：raw_score 降序；精确相等时 corpus_ordinal 升序；不得用无序集合迭代、chunk_id 字典序或近似 tie。
+- **D-V9 过滤**：不按 cosine 正负过滤；非空 query + 非空语料返回 min(k, corpus_size) 条。理由：cosine 合法域为 [−1, 1]，负 cosine 不是 BM25 式"无匹配"标记；
+  不照搬 BM25 的 raw_score > 0。
+- **D-V10 空 query**：空或全空白 query 返回 []，且不调用 embedding endpoint。
+
+### 状态
+
+- `MODEL_SELECTION_STATUS = FROZEN_FOR_M1C`；`VECTOR_PROTOCOL_STATUS = FROZEN_FOR_M1C_BASELINE`；`SHIP_X86_EQUIVALENCE = NOT_MEASURED`；`S8_OVERALL_STATUS = OPEN`。
