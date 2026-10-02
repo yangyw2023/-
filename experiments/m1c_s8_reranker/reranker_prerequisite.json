@@ -1,0 +1,2057 @@
+{
+  "actual_tokens": "proxy = sum of S4a.9c per-chunk actual_rendered_tokens (no tokenizer run), as in BM25 closure E",
+  "budget_boundary": {
+    "TTFT_180S_STATUS": "EXPLORATORY_UPPER_BOUND_ONLY",
+    "TTFT_BUDGET_10S_STATUS": "BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED",
+    "falsified_if": "numeric token contract changes such that the realized-k distribution or the reranker decision criterion changes"
+  },
+  "executable_packing_contract": {
+    "CHARS_PER_TOKEN_EST": 4,
+    "CITATION_HEADER_EST_TOKENS": 14,
+    "CONTEXT_PACK_BUDGET_TOKENS": 765,
+    "CONTEXT_PACK_MARGIN": 0.9,
+    "MAX_PROMPT_TOKENS": 1050,
+    "PROMPT_OVERHEAD_RESERVE_TOKENS": 200,
+    "TOP_K_CONTEXT": 5,
+    "function": "core.contracts.pack_context (relevance prefix, saved order)"
+  },
+  "inputs": {
+    "bm25_packing_sha256": "81fedf9fd7ad2a0ba46a128a8c6fbe449a2131216bb9a8e5c482164eebb65313",
+    "chunk_token_proxy_csv_sha256": "b8c00b39c45427e7ca6d688b684fa81ce283aa694472c9c308516b4d69d2d337",
+    "contracts_sha256": "7f3f5ae9029f503a4f685e6b8d67925df661322a1c5d8e9f5fd753feab0d21df",
+    "contracts_version": "0.4.0",
+    "corpus_sha256": "c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb",
+    "gold_chunk_map_sha256": "8cf9f3be1b1bc296c196d1b5598c1351d456f83b1a05a6043c7b643f0fedeacc",
+    "metrics_sha256": {
+      "bm25": "019f6ee850bcb4788aa48d32807ccc1d61c2a570343104674004c5b37529b339",
+      "hybrid": "97021b12a03d5e5e6535ea794af64f4e1e022667297d725538f34e9932152f81",
+      "vector": "aa404fa9e1a33c3d1d3c87c5dde2624c70fc68471c6d79b16a56e37c0b286599"
+    },
+    "routes": {
+      "bm25": {
+        "code_commit": "3511aa072be3b6a1e3551017418ebda8e5d5ed8d",
+        "results_sha256": "9ce4df232af8c395e0749dcb2fd9c84e5376a7939ae20af7005b12d54dac3ba8",
+        "retrieval_config_digest": "3069070aad6aec04259313c0242a251c191808f53cde574cf6534529034b8a2e"
+      },
+      "hybrid": {
+        "code_commit": "1e07e1b08d58d9980b7c6cee3fd7b5d389e0b26d",
+        "results_sha256": "5d859a901f49155aa8be6f4e84f3b79bf8e564261d026f0397ef54a1cff5e9a8",
+        "retrieval_config_digest": "97ddd20aa9f4e837f188c7c6eb29c5eaa400544b5b2eff367c8e0eed4425e621"
+      },
+      "vector": {
+        "code_commit": "1a7c6749ba844e33f3237625c4e21f18c3d77c1e",
+        "results_sha256": "0e80682cfded9fb73db0b9204120582984f33604ab5bfbc88694d47f9d371073",
+        "retrieval_config_digest": "c9c3868cf19a77d2b88a705580367ba933930af28c265887d2da6aad7a0e7343"
+      }
+    },
+    "testset_sha256": "05614407a0e43a7f912ae17864892b0f069a22d1ad9d1ec2bfb7362150883e8b"
+  },
+  "measurement_kind": "PACKED_CONTEXT_REALIZED_K under CURRENT_EXECUTABLE_CONTRACT_ONLY (prereg §11)",
+  "realized_k_route_invariant": false,
+  "route_gap_decision": "P1_MEASURE_ALL_FROZEN_ROUTES",
+  "routes": {
+    "bm25": {
+      "cd01": {
+        "gold_ids": [
+          "ERM:p105:0",
+          "ERM:p105:1",
+          "SMM:p73:0",
+          "SMM:p73:1",
+          "SMM:p74:0"
+        ],
+        "gold_ranks": [
+          1,
+          8,
+          10,
+          11,
+          12
+        ],
+        "packed_gold_coverage": "1/5",
+        "packed_gold_ids": [
+          "SMM:p73:1"
+        ],
+        "packed_ids": [
+          "SMM:p73:1",
+          "SMM:p85:2"
+        ],
+        "realized_k": 2,
+        "retrieval_attribution": "NO_RETRIEVAL_FAILURE"
+      },
+      "est_overbudget_count": 0,
+      "fixed_k_headroom": {
+        "k_context_2": {
+          "ANY@2": 0.5483870967741935,
+          "ANY@20": 0.8709677419354839,
+          "headroom": 0.32258064516129037
+        },
+        "k_context_3": {
+          "ANY@20": 0.8709677419354839,
+          "ANY@3": 0.6451612903225806,
+          "headroom": 0.22580645161290325
+        }
+      },
+      "packed_answer_31": {
+        "ALL_MAPPED_GOLD": 0.45161290322580644,
+        "ANY_GOLD": 0.5806451612903226,
+        "GOLD_COVERAGE": 0.5118279569892473,
+        "mean_realized_k": 2.193548387096774,
+        "n": 31
+      },
+      "per_window": [
+        {
+          "est_context_tokens": 613,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p32:2",
+            "CMM:p34:0"
+          ],
+          "proxy_actual_context_tokens": 454,
+          "proxy_overbudget": false,
+          "question_id": "FL01",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 524,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CRM:p57:1",
+            "CRM:p58:0"
+          ],
+          "proxy_actual_context_tokens": 339,
+          "proxy_overbudget": false,
+          "question_id": "FL02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 441,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CRM:p56:1",
+            "ERM:p118:0"
+          ],
+          "proxy_actual_context_tokens": 406,
+          "proxy_overbudget": false,
+          "question_id": "FL03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 748,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p29:1",
+            "FMM:p41:0",
+            "FMM:p29:2"
+          ],
+          "proxy_actual_context_tokens": 603,
+          "proxy_overbudget": false,
+          "question_id": "FL04",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 702,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p32:0",
+            "FMM:p33:1"
+          ],
+          "proxy_actual_context_tokens": 555,
+          "proxy_overbudget": false,
+          "question_id": "FL05",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 490,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p33:2",
+            "QMM:p33:0"
+          ],
+          "proxy_actual_context_tokens": 338,
+          "proxy_overbudget": false,
+          "question_id": "FL06",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 654,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p32:5",
+            "QMM:p34:1",
+            "QMM:p32:4"
+          ],
+          "proxy_actual_context_tokens": 531,
+          "proxy_overbudget": false,
+          "question_id": "FL07",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 602,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p57:1",
+            "TACM:p34:1"
+          ],
+          "proxy_actual_context_tokens": 499,
+          "proxy_overbudget": false,
+          "question_id": "FL08",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 556,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "NPM:p35:1",
+            "NPM:p54:0"
+          ],
+          "proxy_actual_context_tokens": 349,
+          "proxy_overbudget": false,
+          "question_id": "FL09",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 468,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "NPM:p27:0",
+            "NPM:p26:3"
+          ],
+          "proxy_actual_context_tokens": 425,
+          "proxy_overbudget": false,
+          "question_id": "FL10",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 737,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "TACM:p23:0",
+            "TACM:p1:1",
+            "TACM:p120:0"
+          ],
+          "proxy_actual_context_tokens": 625,
+          "proxy_overbudget": false,
+          "question_id": "FL11",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 692,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p14:0",
+            "ERM:p20:0"
+          ],
+          "proxy_actual_context_tokens": 482,
+          "proxy_overbudget": false,
+          "question_id": "FL12",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 521,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p265:3",
+            "EMM:p133:0"
+          ],
+          "proxy_actual_context_tokens": 452,
+          "proxy_overbudget": false,
+          "question_id": "FL13",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 585,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p75:0",
+            "SMM:p75:2"
+          ],
+          "proxy_actual_context_tokens": 525,
+          "proxy_overbudget": false,
+          "question_id": "FL14",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 605,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p32:2",
+            "CMM:p32:1"
+          ],
+          "proxy_actual_context_tokens": 448,
+          "proxy_overbudget": false,
+          "question_id": "FL15",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 597,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p40:0",
+            "SMM:p35:0",
+            "SMM:p21:0"
+          ],
+          "proxy_actual_context_tokens": 519,
+          "proxy_overbudget": false,
+          "question_id": "CN01",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 688,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p1:0",
+            "QMM:p14:0"
+          ],
+          "proxy_actual_context_tokens": 593,
+          "proxy_overbudget": false,
+          "question_id": "CN02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 453,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p47:0",
+            "ERM:p14:0"
+          ],
+          "proxy_actual_context_tokens": 398,
+          "proxy_overbudget": false,
+          "question_id": "CN03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 559,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p43:1",
+            "SMM:p64:1"
+          ],
+          "proxy_actual_context_tokens": 441,
+          "proxy_overbudget": false,
+          "question_id": "CN04",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 374,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p103:0",
+            "ERM:p104:0",
+            "ERM:p86:0",
+            "ERM:p93:0",
+            "ERM:p106:0"
+          ],
+          "proxy_actual_context_tokens": 278,
+          "proxy_overbudget": false,
+          "question_id": "PR01",
+          "realized_k": 5,
+          "stopped_by": "max_chunks"
+        },
+        {
+          "est_context_tokens": 640,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p74:0",
+            "SMM:p72:0"
+          ],
+          "proxy_actual_context_tokens": 538,
+          "proxy_overbudget": false,
+          "question_id": "PR02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 594,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p16:2",
+            "EMM:p101:1"
+          ],
+          "proxy_actual_context_tokens": 499,
+          "proxy_overbudget": false,
+          "question_id": "PR03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 462,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p35:0",
+            "SMM:p85:2"
+          ],
+          "proxy_actual_context_tokens": 389,
+          "proxy_overbudget": false,
+          "question_id": "PR04",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 508,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "EMM:p131:0",
+            "EMM:p107:1"
+          ],
+          "proxy_actual_context_tokens": 371,
+          "proxy_overbudget": false,
+          "question_id": "PR05",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 548,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p148:2",
+            "SMM:p65:3"
+          ],
+          "proxy_actual_context_tokens": 448,
+          "proxy_overbudget": false,
+          "question_id": "PR06",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 613,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p73:1",
+            "SMM:p85:2"
+          ],
+          "proxy_actual_context_tokens": 510,
+          "proxy_overbudget": false,
+          "question_id": "CD01",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 697,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "EMM:p96:0",
+            "QMM:p73:0"
+          ],
+          "proxy_actual_context_tokens": 569,
+          "proxy_overbudget": false,
+          "question_id": "CD02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 652,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p29:0",
+            "CMM:p46:1"
+          ],
+          "proxy_actual_context_tokens": 479,
+          "proxy_overbudget": false,
+          "question_id": "CD03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 459,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "QMM:p106:3",
+            "NPM:p51:3"
+          ],
+          "proxy_actual_context_tokens": 373,
+          "proxy_overbudget": false,
+          "question_id": "TR01",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 626,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "SMM:p52:1",
+            "EMM:p145:0"
+          ],
+          "proxy_actual_context_tokens": 521,
+          "proxy_overbudget": false,
+          "question_id": "TR02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 599,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "FMM:p175:2",
+            "FMM:p174:1"
+          ],
+          "proxy_actual_context_tokens": 468,
+          "proxy_overbudget": false,
+          "question_id": "TR03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 458,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "CMM:p88:0",
+            "TACM:p20:2"
+          ],
+          "proxy_actual_context_tokens": 329,
+          "proxy_overbudget": false,
+          "question_id": "TR04",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 639,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "NPM:p27:3",
+            "NPM:p18:1",
+            "NPM:p52:4"
+          ],
+          "proxy_actual_context_tokens": 542,
+          "proxy_overbudget": false,
+          "question_id": "TR05",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 630,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "CMM:p15:2",
+            "ERM:p38:0",
+            "ERM:p104:0"
+          ],
+          "proxy_actual_context_tokens": 340,
+          "proxy_overbudget": false,
+          "question_id": "TR06",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 525,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "QMM:p9:1",
+            "FMM:p214:1"
+          ],
+          "proxy_actual_context_tokens": 391,
+          "proxy_overbudget": false,
+          "question_id": "TR07",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 681,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "FMM:p81:0",
+            "SMM:p77:0"
+          ],
+          "proxy_actual_context_tokens": 579,
+          "proxy_overbudget": false,
+          "question_id": "TR08",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 657,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p40:1",
+            "ERM:p130:2"
+          ],
+          "proxy_actual_context_tokens": 262,
+          "proxy_overbudget": false,
+          "question_id": "ML02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 613,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p47:0",
+            "QMM:p69:0",
+            "QMM:p45:3"
+          ],
+          "proxy_actual_context_tokens": 464,
+          "proxy_overbudget": false,
+          "question_id": "ML03",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        }
+      ],
+      "proxy_overbudget_count": 0,
+      "questions_without_window": [
+        "ML01"
+      ],
+      "realized_k_all_windows": {
+        "count_by_k": {
+          "1": 0,
+          "2": 30,
+          "3": 7,
+          "4": 0,
+          "5": 1
+        },
+        "max": 5,
+        "median": 2.0,
+        "min": 2,
+        "mode": [
+          2
+        ],
+        "n_windows": 38
+      },
+      "realized_k_answer_windows": {
+        "count_by_k": {
+          "1": 0,
+          "2": 24,
+          "3": 5,
+          "4": 0,
+          "5": 1
+        },
+        "max": 5,
+        "median": 2.0,
+        "min": 2,
+        "mode": [
+          2
+        ],
+        "n_windows": 30
+      },
+      "realized_k_refuse_windows": {
+        "count_by_k": {
+          "1": 0,
+          "2": 6,
+          "3": 2,
+          "4": 0,
+          "5": 0
+        },
+        "max": 3,
+        "median": 2.0,
+        "min": 2,
+        "mode": [
+          2
+        ],
+        "n_windows": 8
+      },
+      "realized_window_rerank_opportunity": {
+        "count": 9,
+        "definition": "gold in top-20 but first_gold_rank > this question's realized_k",
+        "question_ids": [
+          "CD03",
+          "CN02",
+          "CN04",
+          "FL13",
+          "FL14",
+          "ML03",
+          "PR01",
+          "PR05",
+          "PR06"
+        ]
+      },
+      "source": "s8_bm25_packing.json (recorded, not recomputed)"
+    },
+    "hybrid": {
+      "cd01": {
+        "gold_ids": [
+          "ERM:p105:0",
+          "ERM:p105:1",
+          "SMM:p73:0",
+          "SMM:p73:1",
+          "SMM:p74:0"
+        ],
+        "gold_ranks": [
+          1,
+          4,
+          6,
+          7,
+          8
+        ],
+        "packed_gold_coverage": "1/5",
+        "packed_gold_ids": [
+          "SMM:p73:1"
+        ],
+        "packed_ids": [
+          "SMM:p73:1",
+          "SMM:p84:0"
+        ],
+        "realized_k": 2,
+        "retrieval_attribution": "NO_RETRIEVAL_FAILURE"
+      },
+      "est_overbudget_count": 0,
+      "fixed_k_headroom": {
+        "k_context_2": {
+          "ANY@2": 0.7096774193548387,
+          "ANY@20": 1.0,
+          "headroom": 0.29032258064516125
+        },
+        "k_context_3": {
+          "ANY@20": 1.0,
+          "ANY@3": 0.7741935483870968,
+          "headroom": 0.22580645161290325
+        }
+      },
+      "packed_answer_31": {
+        "ALL_MAPPED_GOLD": 0.5483870967741935,
+        "ANY_GOLD": 0.7419354838709677,
+        "GOLD_COVERAGE": 0.6408602150537634,
+        "mean_realized_k": 2.2580645161290325,
+        "n": 31
+      },
+      "per_window": [
+        {
+          "est_context_tokens": 608,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p32:2",
+            "CMM:p33:0"
+          ],
+          "proxy_actual_context_tokens": 476,
+          "proxy_overbudget": false,
+          "question_id": "FL01",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 524,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CRM:p57:1",
+            "CRM:p58:0"
+          ],
+          "proxy_actual_context_tokens": 339,
+          "proxy_overbudget": false,
+          "question_id": "FL02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 570,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CRM:p56:1",
+            "CRM:p40:0",
+            "CRM:p24:0"
+          ],
+          "proxy_actual_context_tokens": 482,
+          "proxy_overbudget": false,
+          "question_id": "FL03",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 748,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p41:0",
+            "FMM:p29:1",
+            "FMM:p29:2"
+          ],
+          "proxy_actual_context_tokens": 603,
+          "proxy_overbudget": false,
+          "question_id": "FL04",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 702,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p32:0",
+            "FMM:p33:1"
+          ],
+          "proxy_actual_context_tokens": 555,
+          "proxy_overbudget": false,
+          "question_id": "FL05",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 490,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p33:2",
+            "QMM:p33:0"
+          ],
+          "proxy_actual_context_tokens": 338,
+          "proxy_overbudget": false,
+          "question_id": "FL06",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 654,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p32:5",
+            "QMM:p32:4",
+            "QMM:p34:1"
+          ],
+          "proxy_actual_context_tokens": 531,
+          "proxy_overbudget": false,
+          "question_id": "FL07",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 590,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p83:2",
+            "QMM:p57:1"
+          ],
+          "proxy_actual_context_tokens": 471,
+          "proxy_overbudget": false,
+          "question_id": "FL08",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 620,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "NPM:p35:1",
+            "NPM:p35:3"
+          ],
+          "proxy_actual_context_tokens": 408,
+          "proxy_overbudget": false,
+          "question_id": "FL09",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 672,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "NPM:p27:0",
+            "NPM:p26:2"
+          ],
+          "proxy_actual_context_tokens": 594,
+          "proxy_overbudget": false,
+          "question_id": "FL10",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 715,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "TACM:p23:0",
+            "TACM:p1:1",
+            "TACM:p2:0"
+          ],
+          "proxy_actual_context_tokens": 652,
+          "proxy_overbudget": false,
+          "question_id": "FL11",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 692,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p14:0",
+            "ERM:p20:0"
+          ],
+          "proxy_actual_context_tokens": 482,
+          "proxy_overbudget": false,
+          "question_id": "FL12",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 517,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p265:3",
+            "EMM:p131:1"
+          ],
+          "proxy_actual_context_tokens": 493,
+          "proxy_overbudget": false,
+          "question_id": "FL13",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 585,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p75:0",
+            "SMM:p75:2"
+          ],
+          "proxy_actual_context_tokens": 525,
+          "proxy_overbudget": false,
+          "question_id": "FL14",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 605,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p32:2",
+            "CMM:p32:1"
+          ],
+          "proxy_actual_context_tokens": 448,
+          "proxy_overbudget": false,
+          "question_id": "FL15",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 501,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p35:0",
+            "SMM:p36:0"
+          ],
+          "proxy_actual_context_tokens": 409,
+          "proxy_overbudget": false,
+          "question_id": "CN01",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 633,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p21:0",
+            "QMM:p97:0"
+          ],
+          "proxy_actual_context_tokens": 504,
+          "proxy_overbudget": false,
+          "question_id": "CN02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 453,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p14:0",
+            "QMM:p47:0"
+          ],
+          "proxy_actual_context_tokens": 398,
+          "proxy_overbudget": false,
+          "question_id": "CN03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 731,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p43:1",
+            "SMM:p86:2",
+            "SMM:p37:0"
+          ],
+          "proxy_actual_context_tokens": 529,
+          "proxy_overbudget": false,
+          "question_id": "CN04",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 461,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p103:0",
+            "ERM:p104:0",
+            "EMM:p74:0"
+          ],
+          "proxy_actual_context_tokens": 331,
+          "proxy_overbudget": false,
+          "question_id": "PR01",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 640,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p72:0",
+            "SMM:p74:0"
+          ],
+          "proxy_actual_context_tokens": 538,
+          "proxy_overbudget": false,
+          "question_id": "PR02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 757,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p74:0",
+            "EMM:p101:1",
+            "CMM:p51:2"
+          ],
+          "proxy_actual_context_tokens": 584,
+          "proxy_overbudget": false,
+          "question_id": "PR03",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 462,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p35:0",
+            "SMM:p85:2"
+          ],
+          "proxy_actual_context_tokens": 389,
+          "proxy_overbudget": false,
+          "question_id": "PR04",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 594,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "EMM:p131:0",
+            "EMM:p131:1"
+          ],
+          "proxy_actual_context_tokens": 535,
+          "proxy_overbudget": false,
+          "question_id": "PR05",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 636,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p38:2",
+            "FMM:p38:3"
+          ],
+          "proxy_actual_context_tokens": 492,
+          "proxy_overbudget": false,
+          "question_id": "PR06",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 687,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p73:1",
+            "SMM:p84:0"
+          ],
+          "proxy_actual_context_tokens": 603,
+          "proxy_overbudget": false,
+          "question_id": "CD01",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 646,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "EMM:p96:0",
+            "EMM:p99:0"
+          ],
+          "proxy_actual_context_tokens": 492,
+          "proxy_overbudget": false,
+          "question_id": "CD02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 615,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p29:0",
+            "SMM:p85:2"
+          ],
+          "proxy_actual_context_tokens": 436,
+          "proxy_overbudget": false,
+          "question_id": "CD03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 699,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "QMM:p106:3",
+            "NPM:p51:3",
+            "EMM:p155:1"
+          ],
+          "proxy_actual_context_tokens": 593,
+          "proxy_overbudget": false,
+          "question_id": "TR01",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 603,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "FMM:p218:1",
+            "FMM:p217:1"
+          ],
+          "proxy_actual_context_tokens": 453,
+          "proxy_overbudget": false,
+          "question_id": "TR02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 755,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "EMM:p29:2",
+            "FMM:p175:2",
+            "FMM:p88:0"
+          ],
+          "proxy_actual_context_tokens": 890,
+          "proxy_overbudget": true,
+          "question_id": "TR03",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 693,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "CMM:p68:0",
+            "CMM:p94:1"
+          ],
+          "proxy_actual_context_tokens": 543,
+          "proxy_overbudget": false,
+          "question_id": "TR04",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 731,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "NPM:p24:2",
+            "NPM:p52:4",
+            "NPM:p52:2",
+            "NPM:p27:3"
+          ],
+          "proxy_actual_context_tokens": 613,
+          "proxy_overbudget": false,
+          "question_id": "TR05",
+          "realized_k": 4,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 509,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "CMM:p41:0",
+            "CMM:p15:2"
+          ],
+          "proxy_actual_context_tokens": 377,
+          "proxy_overbudget": false,
+          "question_id": "TR06",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 473,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "QMM:p9:1",
+            "CMM:p132:1"
+          ],
+          "proxy_actual_context_tokens": 410,
+          "proxy_overbudget": false,
+          "question_id": "TR07",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 688,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "FMM:p4:0",
+            "FMM:p81:0"
+          ],
+          "proxy_actual_context_tokens": 709,
+          "proxy_overbudget": false,
+          "question_id": "TR08",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 547,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p123:1",
+            "CMM:p32:2",
+            "CMM:p124:1"
+          ],
+          "proxy_actual_context_tokens": 291,
+          "proxy_overbudget": false,
+          "question_id": "ML01",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 519,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p32:3",
+            "QMM:p32:5"
+          ],
+          "proxy_actual_context_tokens": 433,
+          "proxy_overbudget": false,
+          "question_id": "ML02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 692,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p14:0",
+            "ERM:p20:0"
+          ],
+          "proxy_actual_context_tokens": 482,
+          "proxy_overbudget": false,
+          "question_id": "ML03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        }
+      ],
+      "proxy_overbudget_count": 1,
+      "questions_without_window": [],
+      "realized_k_all_windows": {
+        "count_by_k": {
+          "1": 0,
+          "2": 28,
+          "3": 10,
+          "4": 1,
+          "5": 0
+        },
+        "max": 4,
+        "median": 2,
+        "min": 2,
+        "mode": [
+          2
+        ],
+        "n_windows": 39
+      },
+      "realized_k_answer_windows": {
+        "count_by_k": {
+          "1": 0,
+          "2": 23,
+          "3": 8,
+          "4": 0,
+          "5": 0
+        },
+        "max": 3,
+        "median": 2,
+        "min": 2,
+        "mode": [
+          2
+        ],
+        "n_windows": 31
+      },
+      "realized_k_refuse_windows": {
+        "count_by_k": {
+          "1": 0,
+          "2": 5,
+          "3": 2,
+          "4": 1,
+          "5": 0
+        },
+        "max": 4,
+        "median": 2.0,
+        "min": 2,
+        "mode": [
+          2
+        ],
+        "n_windows": 8
+      },
+      "realized_window_rerank_opportunity": {
+        "count": 8,
+        "definition": "gold in top-20 but first_gold_rank > this question's realized_k",
+        "question_ids": [
+          "CD03",
+          "CN02",
+          "CN04",
+          "FL14",
+          "ML02",
+          "PR01",
+          "PR03",
+          "PR04"
+        ]
+      },
+      "source": "eval/run_retrieval_eval.compute_packing on frozen top-20 (this script)"
+    },
+    "vector": {
+      "cd01": {
+        "gold_ids": [
+          "ERM:p105:0",
+          "ERM:p105:1",
+          "SMM:p73:0",
+          "SMM:p73:1",
+          "SMM:p74:0"
+        ],
+        "gold_ranks": [
+          1,
+          3,
+          5,
+          8,
+          10
+        ],
+        "packed_gold_coverage": "1/5",
+        "packed_gold_ids": [
+          "SMM:p73:1"
+        ],
+        "packed_ids": [
+          "SMM:p73:1",
+          "SMM:p84:0"
+        ],
+        "realized_k": 2,
+        "retrieval_attribution": "NO_RETRIEVAL_FAILURE"
+      },
+      "est_overbudget_count": 0,
+      "fixed_k_headroom": {
+        "k_context_2": {
+          "ANY@2": 0.8709677419354839,
+          "ANY@20": 0.967741935483871,
+          "headroom": 0.09677419354838712
+        },
+        "k_context_3": {
+          "ANY@20": 0.967741935483871,
+          "ANY@3": 0.8709677419354839,
+          "headroom": 0.09677419354838712
+        }
+      },
+      "packed_answer_31": {
+        "ALL_MAPPED_GOLD": 0.6451612903225806,
+        "ANY_GOLD": 0.8709677419354839,
+        "GOLD_COVERAGE": 0.7537634408602151,
+        "mean_realized_k": 2.3225806451612905,
+        "n": 31
+      },
+      "per_window": [
+        {
+          "est_context_tokens": 733,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p32:2",
+            "CMM:p123:1",
+            "CMM:p123:0"
+          ],
+          "proxy_actual_context_tokens": 348,
+          "proxy_overbudget": false,
+          "question_id": "FL01",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 524,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CRM:p57:1",
+            "CRM:p58:0"
+          ],
+          "proxy_actual_context_tokens": 339,
+          "proxy_overbudget": false,
+          "question_id": "FL02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 570,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CRM:p56:1",
+            "CRM:p24:0",
+            "CRM:p40:0"
+          ],
+          "proxy_actual_context_tokens": 482,
+          "proxy_overbudget": false,
+          "question_id": "FL03",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 748,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p41:0",
+            "FMM:p29:2",
+            "FMM:p29:1"
+          ],
+          "proxy_actual_context_tokens": 603,
+          "proxy_overbudget": false,
+          "question_id": "FL04",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 747,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p33:1",
+            "FMM:p32:0",
+            "FMM:p33:2"
+          ],
+          "proxy_actual_context_tokens": 599,
+          "proxy_overbudget": false,
+          "question_id": "FL05",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 490,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p33:2",
+            "QMM:p33:0"
+          ],
+          "proxy_actual_context_tokens": 338,
+          "proxy_overbudget": false,
+          "question_id": "FL06",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 654,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p32:5",
+            "QMM:p32:4",
+            "QMM:p34:1"
+          ],
+          "proxy_actual_context_tokens": 531,
+          "proxy_overbudget": false,
+          "question_id": "FL07",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 596,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p83:2",
+            "QMM:p79:1"
+          ],
+          "proxy_actual_context_tokens": 488,
+          "proxy_overbudget": false,
+          "question_id": "FL08",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 557,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "NPM:p35:1",
+            "NPM:p35:2"
+          ],
+          "proxy_actual_context_tokens": 288,
+          "proxy_overbudget": false,
+          "question_id": "FL09",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 672,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "NPM:p27:0",
+            "NPM:p26:2"
+          ],
+          "proxy_actual_context_tokens": 594,
+          "proxy_overbudget": false,
+          "question_id": "FL10",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 590,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "TACM:p23:0",
+            "TACM:p21:1"
+          ],
+          "proxy_actual_context_tokens": 467,
+          "proxy_overbudget": false,
+          "question_id": "FL11",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 624,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p14:0",
+            "ERM:p21:0"
+          ],
+          "proxy_actual_context_tokens": 508,
+          "proxy_overbudget": false,
+          "question_id": "FL12",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 517,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p265:3",
+            "EMM:p131:1"
+          ],
+          "proxy_actual_context_tokens": 493,
+          "proxy_overbudget": false,
+          "question_id": "FL13",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 585,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p75:0",
+            "SMM:p75:2"
+          ],
+          "proxy_actual_context_tokens": 525,
+          "proxy_overbudget": false,
+          "question_id": "FL14",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 605,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p32:2",
+            "CMM:p32:1"
+          ],
+          "proxy_actual_context_tokens": 448,
+          "proxy_overbudget": false,
+          "question_id": "FL15",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 501,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p35:0",
+            "SMM:p36:0"
+          ],
+          "proxy_actual_context_tokens": 409,
+          "proxy_overbudget": false,
+          "question_id": "CN01",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 634,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p20:0",
+            "SMM:p21:0"
+          ],
+          "proxy_actual_context_tokens": 515,
+          "proxy_overbudget": false,
+          "question_id": "CN02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 453,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p14:0",
+            "QMM:p47:0"
+          ],
+          "proxy_actual_context_tokens": 398,
+          "proxy_overbudget": false,
+          "question_id": "CN03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 687,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p38:0",
+            "SMM:p39:0",
+            "SMM:p37:0"
+          ],
+          "proxy_actual_context_tokens": 560,
+          "proxy_overbudget": false,
+          "question_id": "CN04",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 468,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p103:0",
+            "ERM:p85:0",
+            "ERM:p104:0"
+          ],
+          "proxy_actual_context_tokens": 393,
+          "proxy_overbudget": false,
+          "question_id": "PR01",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 753,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p72:0",
+            "SMM:p74:0",
+            "SMM:p73:0"
+          ],
+          "proxy_actual_context_tokens": 642,
+          "proxy_overbudget": false,
+          "question_id": "PR02",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 535,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p74:0",
+            "CMM:p74:3",
+            "CMM:p72:2"
+          ],
+          "proxy_actual_context_tokens": 409,
+          "proxy_overbudget": false,
+          "question_id": "PR03",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 442,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p35:0",
+            "SMM:p35:1"
+          ],
+          "proxy_actual_context_tokens": 270,
+          "proxy_overbudget": false,
+          "question_id": "PR04",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 594,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "EMM:p131:1",
+            "EMM:p131:0"
+          ],
+          "proxy_actual_context_tokens": 535,
+          "proxy_overbudget": false,
+          "question_id": "PR05",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 636,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "FMM:p38:2",
+            "FMM:p38:3"
+          ],
+          "proxy_actual_context_tokens": 492,
+          "proxy_overbudget": false,
+          "question_id": "PR06",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 687,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p73:1",
+            "SMM:p84:0"
+          ],
+          "proxy_actual_context_tokens": 603,
+          "proxy_overbudget": false,
+          "question_id": "CD01",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 646,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "EMM:p96:0",
+            "EMM:p99:0"
+          ],
+          "proxy_actual_context_tokens": 492,
+          "proxy_overbudget": false,
+          "question_id": "CD02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 682,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "SMM:p29:0",
+            "FMM:p38:2"
+          ],
+          "proxy_actual_context_tokens": 481,
+          "proxy_overbudget": false,
+          "question_id": "CD03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 602,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "QMM:p106:3",
+            "QMM:p98:4",
+            "EMM:p162:1"
+          ],
+          "proxy_actual_context_tokens": 492,
+          "proxy_overbudget": false,
+          "question_id": "TR01",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 555,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "FMM:p218:1",
+            "FMM:p174:0"
+          ],
+          "proxy_actual_context_tokens": 382,
+          "proxy_overbudget": false,
+          "question_id": "TR02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 468,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "EMM:p29:2",
+            "FMM:p88:0"
+          ],
+          "proxy_actual_context_tokens": 663,
+          "proxy_overbudget": false,
+          "question_id": "TR03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 672,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "EMM:p83:0",
+            "CMM:p123:1",
+            "QMM:p137:1"
+          ],
+          "proxy_actual_context_tokens": 429,
+          "proxy_overbudget": false,
+          "question_id": "TR04",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 671,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "NPM:p79:0",
+            "NPM:p38:0"
+          ],
+          "proxy_actual_context_tokens": 614,
+          "proxy_overbudget": false,
+          "question_id": "TR05",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 638,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "CMM:p28:2",
+            "CMM:p41:0"
+          ],
+          "proxy_actual_context_tokens": 489,
+          "proxy_overbudget": false,
+          "question_id": "TR06",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 623,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "SMM:p11:2",
+            "SMM:p63:0",
+            "QMM:p9:1"
+          ],
+          "proxy_actual_context_tokens": 550,
+          "proxy_overbudget": false,
+          "question_id": "TR07",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 542,
+          "est_overbudget": false,
+          "expected": "refuse",
+          "packed_ids": [
+            "FMM:p4:0",
+            "FMM:p128:2"
+          ],
+          "proxy_actual_context_tokens": 622,
+          "proxy_overbudget": false,
+          "question_id": "TR08",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 547,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "CMM:p123:1",
+            "CMM:p32:2",
+            "CMM:p124:1"
+          ],
+          "proxy_actual_context_tokens": 291,
+          "proxy_overbudget": false,
+          "question_id": "ML01",
+          "realized_k": 3,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 490,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "QMM:p33:2",
+            "QMM:p33:0"
+          ],
+          "proxy_actual_context_tokens": 338,
+          "proxy_overbudget": false,
+          "question_id": "ML02",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        },
+        {
+          "est_context_tokens": 624,
+          "est_overbudget": false,
+          "expected": "answer",
+          "packed_ids": [
+            "ERM:p21:0",
+            "ERM:p14:0"
+          ],
+          "proxy_actual_context_tokens": 508,
+          "proxy_overbudget": false,
+          "question_id": "ML03",
+          "realized_k": 2,
+          "stopped_by": "budget"
+        }
+      ],
+      "proxy_overbudget_count": 0,
+      "questions_without_window": [],
+      "realized_k_all_windows": {
+        "count_by_k": {
+          "1": 0,
+          "2": 26,
+          "3": 13,
+          "4": 0,
+          "5": 0
+        },
+        "max": 3,
+        "median": 2,
+        "min": 2,
+        "mode": [
+          2
+        ],
+        "n_windows": 39
+      },
+      "realized_k_answer_windows": {
+        "count_by_k": {
+          "1": 0,
+          "2": 21,
+          "3": 10,
+          "4": 0,
+          "5": 0
+        },
+        "max": 3,
+        "median": 2,
+        "min": 2,
+        "mode": [
+          2
+        ],
+        "n_windows": 31
+      },
+      "realized_k_refuse_windows": {
+        "count_by_k": {
+          "1": 0,
+          "2": 5,
+          "3": 3,
+          "4": 0,
+          "5": 0
+        },
+        "max": 3,
+        "median": 2.0,
+        "min": 2,
+        "mode": [
+          2
+        ],
+        "n_windows": 8
+      },
+      "realized_window_rerank_opportunity": {
+        "count": 3,
+        "definition": "gold in top-20 but first_gold_rank > this question's realized_k",
+        "question_ids": [
+          "FL08",
+          "PR01",
+          "PR03"
+        ]
+      },
+      "source": "eval/run_retrieval_eval.compute_packing on frozen top-20 (this script)"
+    }
+  },
+  "status": "S8 reranker prerequisite real retrieval-window measurement; MEASUREMENT_ONLY (not a retrieval baseline)"
+}

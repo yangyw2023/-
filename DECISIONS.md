@@ -4375,3 +4375,75 @@ hybrid top-20 candidate miss = 0 / 31。
 
 - `FAILURE_ATTRIBUTION = CLOSED`；`RERANKER_L1_DECISION = PENDING`；`TOP_K_RETRIEVE_L1_DECISION = PENDING`；**`S8_OVERALL_STATUS = OPEN`**。
 - `NEXT_STEP = RERANKER_PREREQUISITE`。
+
+
+## 2026-10-02 · S8 reranker prerequisite real-window measurement
+
+**`RERANKER_PREREQUISITE_STATUS = SATISFIED`；`RERANKER_L1_DECISION = PENDING`；`TOP_K_RETRIEVE_L1_DECISION = PENDING`；`S8_OVERALL_STATUS = OPEN`。**
+
+### A. authority gap 的裁决
+
+- D2（L3215–3216）与 prereg §7.5 要求 reranker 决策在 real retrieval-window measurement 之后；prereg §11 未指定 route（上一轮审计）。
+- **人工裁决：`RERANKER_REAL_WINDOW_ROUTE_GAP_DECISION = P1_MEASURE_ALL_FROZEN_ROUTES`。** 理由：realized k 取决于排序前部 chunk 的长度，BM25 的结果
+  不能自动代表 vector / hybrid；最终 production ranking 尚未裁定，不预设只测 hybrid；BM25 已有正式 measurement，vector / hybrid 可直接消费各自冻结
+  top-20、用同一个已提交的 compute_packing 补测；不重跑 retrieval / embedding，不改排序、retrieval protocol 或 numeric token contract。不选 P2（只测 hybrid）、P3（只用 BM25）。
+
+### B. 测量定义
+
+- prereg §11 `PACKED_CONTEXT_MEASUREMENT`，`CURRENT_EXECUTABLE_CONTRACT_ONLY`：每题保存的 top-20 按原顺序交给 `core.contracts.pack_context`（relevance 前缀，不重排），
+  经已提交的 `eval/run_retrieval_eval.compute_packing`。契约值（取自 contracts 0.4.0，sha 与三份 artifact 的 run identity 一致）：MAX_PROMPT_TOKENS 1050、
+  PROMPT_OVERHEAD_RESERVE_TOKENS 200、CONTEXT_PACK_MARGIN 0.90、CONTEXT_PACK_BUDGET_TOKENS 765、TOP_K_CONTEXT 5。actual token cost 为 PROXY（S4a.9c 逐 chunk 实测
+  rendered token 之和，未跑 tokenizer），同 BM25 closure E。
+- BM25 沿用已记录的 `s8_bm25_packing.json`（未重算；QA 中用同一函数复算逐窗口一致）；vector / hybrid 为本条新测。全部是 `MEASUREMENT_ONLY`，不是新的检索 baseline。
+
+### C. realized k（全部有 packing window 的题；`MEASURED`）
+
+| route | windows | k=2 | k=3 | k=4 | k=5 | min / median / max | mode | 可答题 windows（k=2 / 3 / 5） |
+|---|---|---|---|---|---|---|---|---|
+| BM25 | 38（ML01 无结果） | 30 | 7 | 0 | 1 | 2 / 2 / 5 | 2 | 30（24 / 5 / 1） |
+| vector | 39 | 26 | 13 | 0 | 0 | 2 / 2 / 3 | 2 | 31（21 / 10 / 0） |
+| hybrid | 39 | 28 | 10 | 1 | 0 | 2 / 2 / 4 | 2 | 31（23 / 8 / 0） |
+
+- 三路都没有 k = 1。`REALIZED_K_ROUTE_INVARIANT = NO`（分布不同；三路 mode 与 median 均为 2）。hybrid 的 k = 4 窗口是 refuse 题。
+
+### D. packed 指标（31 道可答题，`MEASUREMENT_ONLY`）
+
+| route | packed ANY | packed COVERAGE | packed ALL | mean realized k | est overbudget | proxy overbudget |
+|---|---|---|---|---|---|---|
+| BM25 | 0.581 | 0.512 | 0.452 | 2.194 | 0 | 0 |
+| vector | 0.871 | 0.754 | 0.645 | 2.323 | 0 | 0 |
+| hybrid | 0.742 | 0.641 | 0.548 | 2.258 | 0 | 1 |
+
+- proxy overbudget 1：hybrid TR03（refuse，k = 3，估算 755 ≤ 765，proxy 890 + 200 > 1050）—— 估算器判安全但 proxy 超限；只作观察，不改预算。
+- fixed-k 参照（正式 metrics）：k_context = 2 时 ANY@2 → ANY@20 差距 BM25 0.548 → 0.871（0.323）、vector 0.871 → 0.968（0.097）、hybrid 0.710 → 1.000（0.290）；
+  k_context = 3 时 BM25 0.645 → 0.871（0.226）、vector 0.871 → 0.968（0.097）、hybrid 0.774 → 1.000（0.226）。不据此选择 k_context。
+
+### E. realized-window rerank opportunity（`DESCRIPTIVE_MEASUREMENT`）
+
+- 定义：gold 在 top-20 内，但该题第一个 gold 的 rank > 该题自己的 realized k（逐题值，不是全局 k）。不表示 reranker 一定能修复。
+- vector：3 / 31 —— FL08、PR01、PR03。
+- hybrid：8 / 31 —— CD03、CN02、CN04、FL14、ML02、PR01、PR03、PR04。
+- （BM25 同口径：9 / 31 —— CD03、CN02、CN04、FL13、FL14、ML03、PR01、PR05、PR06；另有 4 题 top-20 无 gold。）
+
+### F. CD01（检索归因仍为 NO_RETRIEVAL_FAILURE；以下只是 packing 观察）
+
+| route | gold ranks | realized k | packed ids | packed gold coverage |
+|---|---|---|---|---|
+| BM25 | 1, 8, 10, 11, 12 | 2 | SMM:p73:1、SMM:p85:2 | 1 / 5（SMM:p73:1） |
+| vector | 1, 3, 5, 8, 10 | 2 | SMM:p73:1、SMM:p84:0 | 1 / 5（SMM:p73:1） |
+| hybrid | 1, 4, 6, 7, 8 | 2 | SMM:p73:1、SMM:p84:0 | 1 / 5（SMM:p73:1） |
+
+三路在当前契约下都只装入 2 块、只含 1 / 5 个 gold，ERM 侧 gold 都未进入 context —— 与执行手册"可能结构性不可答"的预测一致（描述性）。
+
+### G. 预算边界
+
+- 本测量 = `CURRENT_EXECUTABLE_CONTRACT_ONLY`；本轮不改任何预算。`TTFT_BUDGET_10S_STATUS = BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED`；180 s = `EXPLORATORY_UPPER_BOUND_ONLY`。
+- falsified_if：numeric token contract 改变，导致 realized-k 分布或 reranker 决策判据改变 → 依赖它的 reranker L1 决策必须重新检查。不因此阻塞当前决策。
+
+### H. artifact 与状态
+
+- `experiments/m1c_s8_reranker/reranker_prerequisite.json` = `4e035f85d9f3e376d3a420ca27aca0a3a52f6aba57cb2de1c881b8815f603d59`（deterministic，sort_keys；重跑逐字节相同）；
+  生成脚本 `measure_reranker_prerequisite.py`。输入：三份 results（9ce4df23… / 0e80682c… / 5d859a90…）、三份 metrics、BM25 packing（81fedf9f…）、corpus / testset / GoldChunkMap。
+- QA PASS：每路 31 / 8 / 39；window 数 = 有结果的题数；每个 packed 序列都是该题冻结 top-20 的有序前缀；opportunity 独立重算一致；冻结 retrieval artifact 字节未变。
+- `RERANKER_PREREQUISITE_STATUS = SATISFIED`；`RERANKER_L1_DECISION = PENDING`；`TOP_K_RETRIEVE_L1_DECISION = PENDING`；**`S8_OVERALL_STATUS = OPEN`**；
+  `NEXT_STEP = RERANKER_L1_DECISION`。
