@@ -4288,3 +4288,90 @@ embedding dependency 尚未完全冻结 → `HYBRID_BASELINE_READY = NO`"由本�
 
 - `FAILURE_ATTRIBUTION_PROTOCOL_STATUS = FROZEN`；`FAILURE_ATTRIBUTION_STATUS = PENDING_HUMAN`；`RERANKER_L1_DECISION = PENDING`；
   **`S8_OVERALL_STATUS = OPEN`**。
+
+
+## 2026-10-02 · S8 failure attribution result（human）
+
+**`FAILURE_ATTRIBUTION = CLOSED`；`RERANKER_L1_DECISION = PENDING`；`TOP_K_RETRIEVE_L1_DECISION = PENDING`；`S8_OVERALL_STATUS = OPEN`。**
+落实上一条 "S8 failure attribution protocol closure"。
+
+### A. 人工权威
+
+- `HUMAN_ROLE = FINAL_FAILURE_ATTRIBUTION`；`AI_ROLE = EVIDENCE_PREPARATION_AND_DIAGNOSTICS_ONLY`。
+- 13 题最终标签由 Arya 人工审核后采纳；AI 未重新判断、未改任何标签。
+
+### B. 填写规则（人工裁决，补全上一条留给人工的两项）
+
+- **R1 取值**：parse_failure、chunk_boundary、bm25_miss、vector_miss、fusion_miss、NO_RETRIEVAL_FAILURE。
+  `NO_RETRIEVAL_FAILURE` 只是 attribution packet 的哨兵值，**不是** `core.contracts.FailureTag` 成员（contracts 未改）。
+- **R2**：每题恰好一个 primary tag；secondary factor 只写 note。
+- **R3**：任一路 top-20 candidate miss → 必须用一个 S8 retrieval FailureTag；三路都无 candidate miss → `NO_RETRIEVAL_FAILURE`。
+- **R4**：primary cause = 最上游、且已被证据证明足以解释本次 candidate miss 的环节。
+  `parse_failure`：原 PDF 有、解析后丢失或损坏。`chunk_boundary`：内容存在，但所属逻辑单元被分到不同 chunk，且反事实地移动被分离部分后，
+  冻结 retriever 可恢复 top-20 gold。否则用 route 级 miss（bm25_miss / vector_miss / fusion_miss）。
+
+### C. 最终计数（13 题）
+
+| primary tag | 数量 | 题 |
+|---|---|---|
+| chunk_boundary | 2 | PR03、PR04 |
+| bm25_miss | 2 | ML01、ML02 |
+| vector_miss | 1 | FL14 |
+| NO_RETRIEVAL_FAILURE | 8 | FL08、CN02、CN03、CN04、PR01、CD01、CD03、ML03 |
+| fusion_miss | 0 | — |
+| parse_failure | 0 | — |
+
+hybrid top-20 candidate miss = 0 / 31。
+
+### D. 反事实证据（`MEASURED`；`chunk_boundary_counterfactual.py`，exit 0）
+
+- 方法：在冻结 corpus 上用冻结 BM25 实现，只把引导语从引导块移到答案块开头，其余 chunk 不动；报告 gold 在完整 BM25 排序中的名次。
+- PR03（引导块 CMM:p74:0 → 答案块 CMM:p74:1）：baseline `{CMM:p74:1: 29, CMM:p74:2: 33}` → counterfactual `{CMM:p74:1: 1, CMM:p74:2: 32}`；recovered_into_top_k = true。
+- PR04（引导块 SMM:p35:0 → 答案块 SMM:p35:1）：baseline `{SMM:p35:1: 35}` → counterfactual `{SMM:p35:1: 1}`；recovered_into_top_k = true。
+- 这是 attribution diagnostic，不是 baseline artifact：没有修改 canonical corpus，没有修改任何 formal baseline，脚本不写文件。
+
+### E. 失败归因
+
+- **PR03 / PR04 = chunk_boundary**：清单 / 表格与其引导语被切到不同 chunk；反事实把引导语移回答案块后 BM25 恢复 top-20（均到 rank 1）。
+- **ML01 = bm25_miss**：CJK analyzer 的结构性限制（prereg §8.3）：中文 query 切成汉字长串 token，BM25 返回 0 条。
+- **ML02 = bm25_miss**：不是完全的词面不可能 —— 与 gold 有部分词面共享；analyzer 无词干、形态差异，以及他加禄语虚词 "sa" 与语料缩写 "SA" 撞词，造成词面检索失败。
+- **FL14 = vector_miss**：vector top-20 无 frozen gold。可能机制（embedding dilution / term placement / same-topic competition）= `NOT_VERIFIED`，不是确定根因。
+
+### F. NO_RETRIEVAL_FAILURE 边界
+
+- **CN03**：当前两项 required_elements 均由 ERM:p14:0 支撑，三路都在 top-20 召回（BM25@2、vector@1、hybrid@1）→ 按当前 S8 retrieval attribution 作用域不构成
+  retrieval failure。QMM:p46:1 对应 acceptable evidence，三路 top-20 都没有它；citation AND / OR 的标注语义冲突（prereg §8.2）只作为 observation 保留，不改变 primary tag。
+- **CD01**：检索本身不是 failure（5 个 gold 三路 top-20 都在）；packing 风险留给 packing / numeric-contract 线。
+
+### G. FROZEN_GOLD_ALTERNATIVE_EVIDENCE_CANDIDATES（观察，不是 map 错误的证明）
+
+- 候选：FL08 `QMM:p83:2`；ML01 `CMM:p123:1`；ML03 `ERM:p21:0`。
+- 定义：冻结 gold 之外发现的候选替代证据 —— 这些 chunk 看起来能独立支持答案；但 frozen GoldChunkMap 的语义是 citation-to-corpus projection，
+  不是 all answer-supporting evidence registry，因此本观察不证明 map 错误。不修改 GoldChunkMap、不修改 testset、不重跑 S6。
+- 条件性影响：**只有**当后续协议明确把这些 non-gold chunk 接受为 equivalent retrieval evidence 时，才可以说当前基于 frozen GoldChunkMap 的
+  Recall@1 / Recall@2 可能低估语义层面的 evidence retrieval。在此之前：正式 BM25 / vector / hybrid Recall 保持有效，不重算，不修改 frozen artifact，
+  不回溯调整 retrieval protocol。
+
+### H. 多语种观察
+
+- vector first gold rank：ML01 = 2，ML02 = 1，ML03 = 2 —— 三题 vector 全部在 top-2；在这三题上未观察到 bge-m3 的跨语言 candidate retrieval failure。
+- 不外推为 bge-m3 多语种能力已被普遍验证（n = 3）。
+
+### I. 排序观察（`DESCRIPTIVE_ONLY = YES`；由冻结 artifact 重算）
+
+- 可答题 first gold 在 top-2 内：BM25 17 / 31；vector 27 / 31；hybrid 22 / 31。
+- 相对 vector，RRF 使 6 题跌出 top-2：CD03、CN02、CN04、FL04、ML02、PR04；使 1 题进入 top-2：FL08。
+- 本条不据此做 reranker 决策。
+
+### J. Artifact 身份
+
+- `experiments/m1c_s8_attribution/failure_attribution_packet.csv`（人工标签写入后）= `c2ed3f7bec5910aa0e1cb28a0056a691dd4b4103eb5bfa45cf206e4ed3cd5a04`
+  （写入前 `c1a03397…`；只有 human_failure_tag / human_failure_note 两列变化，round-trip 校验 PASS）。
+- `apply_human_labels.py` = `7311b2a75233d740e1d2da618bd7d9ef953ed49f67af8d42c274d20de23eebe0`（审核版 `b6b71de8…`（commit 723594b）之上，
+  经人工批准的三处措辞收窄：候选替代证据表述 ×3、CN03 note；qid → tag 映射未变）。
+- `chunk_boundary_counterfactual.py` = `c31f81d1997d4dc8543805851ba35e0455eefee64271148dca3b881c8b5cb588`（commit 723594b，本轮未改）。
+
+### K. 状态
+
+- `FAILURE_ATTRIBUTION = CLOSED`；`RERANKER_L1_DECISION = PENDING`；`TOP_K_RETRIEVE_L1_DECISION = PENDING`；**`S8_OVERALL_STATUS = OPEN`**。
+- `NEXT_STEP = RERANKER_PREREQUISITE`。
