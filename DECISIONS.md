@@ -4603,3 +4603,75 @@ reranker 已实现；reranker 已通过 latency gate；numeric token contract �
 - 执行手册附录 C 顺序 S8 → S9；S9（MIN_RELEVANCE 校准）的前置是"S8 的逐题明细（含 retrieval scores）"，已由三份冻结 artifact 满足 → `NEXT_STEP = S9`（本条不执行）。
   S9 开始时须处理：prereg `S9_CALIBRATION_SEMANTICS = DEFERRED`；`HYBRID_MATCH_SCORE_IS_UNIFIED_CONFIDENCE = NO`；手册 S9.1 引用的
   `eval/calibrate_threshold.py` 与 `eval/m1c_items__*.csv` 在仓库中不存在。S4a.9d 与 S9 的关系：authority 未规定（`NOT_SPECIFIED`）。
+
+
+## 2026-10-02 · S9 MIN_RELEVANCE calibration protocol
+
+人工裁决（Arya）S9-D1–D3，写于任何 S9 校准数字产生之前；本条由 AI 按裁决落地。与执行手册 S9、contracts MIN_RELEVANCE、实施方案 §14.4 / §18、
+DECISIONS D7 / D8 逐项核对：**无直接冲突**。`S9_PROTOCOL_STATUS = FROZEN`；`S9_CALIBRATION_STATUS = NOT_RUN`。
+
+### [L2] S9 MIN_RELEVANCE 校准协议
+
+- owner_experiment: S9 / M1c threshold calibration。`OWNER_LABEL_CONFLICT = FOLLOWUP`：contracts MIN_RELEVANCE 注释写 owner_experiment M1c、
+  执行手册 S9.3 要求入库条目写 M5；不阻塞本轮。
+- **runtime 判定式（契约，不变）**：拒答 ⇔ `max(match_score over 全部 top-k_retrieve hits) < MIN_RELEVANCE`，在 pack_context 之前；严格 `<`。
+- **S9-D1 route**：`CALIBRATION_ROUTE = HYBRID`；BM25 / vector 只作 diagnostic。MIN_RELEVANCE = 当前 hybrid score construction 下的
+  `EMPIRICAL_OPERATING_THRESHOLD` —— 不是 probability、不是 calibrated confidence、不是可跨 retriever 移植的阈值
+  （`HYBRID_MATCH_SCORE_IS_UNIFIED_CONFIDENCE = NO`）。
+- **population**：31 道可答题 + 7 道计分陷阱（D8 `PRIMARY_TRAP_DENOMINATOR = 7`）；`TR02 = EXCLUDED_FROM_CALIBRATION_DENOMINATOR`（可描述性展示）。
+- **S9-D2 分数**：`THRESHOLD_SCORE_FIELD = match_score`；每题 `gate_score = max(match_score over 冻结 hybrid top-20)`，可答题与陷阱同一口径
+  （`ANSWER_SIDE_SCORE = MAX_MATCH_SCORE_OVER_TOP20`）。gold chunk 分数 `GOLD_SCORE_DIAGNOSTIC_ONLY = YES`（只用于画图和解释，不替代 gate statistic）。
+  D7 的 `S9_CALIBRATION_SEMANTICS = DEFERRED` 由本条关闭。
+- **S9-D3 选值规则**：`THRESHOLD_SELECTION_RULE = CONSERVATIVE_LOW_NEXTAFTER`：
+  `trap_max = max(7 道计分陷阱 gate_score)`；`candidate_threshold = math.nextafter(trap_max, math.inf)`（IEEE-754 binary64 中严格大于 trap_max 的最小 float；
+  不用 +ε、round 或 midpoint —— 显示精度不得决定判定语义）。`answer_min = min(31 道可答题 gate_score)`。
+  - `candidate_threshold <= answer_min` → `PERFECT_SAME_SET_SEPARATION = YES`，`PROPOSED_MIN_RELEVANCE = candidate_threshold`；
+  - 否则 `PERFECT_SAME_SET_SEPARATION = NO`：`ZERO_ANSWER_FALSE_REJECTION` 优先于 `ALL_TRAPS_REJECTED`，脚本不得自动选最终阈值，只输出 trade-off 表，停等人工。
+  - 存储：artifact 保存完整精度 Python float repr；报告 / 图显示 6 位小数。
+- **LOO**：7 折留一（每折留出 1 道计分陷阱）；`fold_threshold = math.nextafter(max(其余 6 道 gate_score), math.inf)`；机械评估 31 道可答题误拒数与留出陷阱是否被拒；
+  每折不重新优化其他规则。LOO 不是独立测试集。
+- **同集边界**：`SAME_SET_THRESHOLD_CALIBRATION = YES`；`S9_CALIBRATION_DATA_STATUS = SAME_SET_PROVISIONAL`；`DISCLOSED = YES`（执行手册 S9.2"接受并披露"）；
+  `RETRIEVAL_RANKING_TUNING = NO`。S9 不得以 `TEST_SET_TUNING_PERFORMED = NO` 概括。独立校准集留 BACKLOG / M5。
+- **最终取值**：脚本只产出 PROPOSED_MIN_RELEVANCE；最终值由 Arya 定（执行手册 S9.3；实施方案 §18），之后另走 `contract:` 变更仪式；脚本不改 contracts。
+- `S4A_9D_BLOCKS_S9 = NO`：判定量只读 match_score、作用在 pack_context 之前（contracts 判定式 (c)），不读 MAX_PROMPT_TOKENS / CONTEXT_PACK_BUDGET_TOKENS / TTFT。
+- falsified_if：hybrid scoring semantics 改变；production retrieval route 改变；reranker 进入 score / gating path；match_score construction 改变。
+
+
+## 2026-10-02 · S9 MIN_RELEVANCE calibration result
+
+**`S9_PROTOCOL_STATUS = FROZEN`；`S9_CALIBRATION_STATUS = CLOSED`；`S9_OVERALL_STATUS = CLOSED`。** 落实上一条 "S9 MIN_RELEVANCE calibration protocol"。
+
+### [L2] MIN_RELEVANCE 校准
+
+- owner_experiment: S9 / M1c threshold calibration（正式校准与独立校准集见 M5；`OWNER_LABEL_CONFLICT = FOLLOWUP`）
+- **A. 人工最终取值**：**`MIN_RELEVANCE = 0.78`**；`MIN_RELEVANCE_STATUS = PROVISIONAL_SAME_SET_CALIBRATED`（Arya，2026-10-02）。
+- **B. 契约**：contract commit `e14a2b0e37b9f768b9cd5059f1959d0226656fbc`；`CONTRACTS_VERSION` 0.4.0 → **0.4.1**（patch；无新 schema / 接口，GoldChunkMap 语义与检索记录语义不变）；
+  `GOLD_CHUNK_MAP_SEMANTICS_VERSION = 0.3.1` 未变。MIN_RELEVANCE 块按执行手册 S9.3 从"阈值（二）未校准"移到"阈值（一）已校准"，
+  "0.35 是猜的"删除，目标句按 S9-D2 改为判定量口径（gold chunk 分数只作诊断）；AST 核对：代码层只变 CONTRACTS_VERSION 与 MIN_RELEVANCE。
+  同 commit 测试：`test_numeric_contract_unchanged`（0.35 → 0.78）、新增 `test_min_relevance_strict_boundary`、两处直接版本钉
+  （`test_contracts_gold_chunk_map.test_version`、`test_tv3_…_accepted_under_current_contracts`，"0.4.0" → "0.4.1"）。targeted 126 / 126、全量 313 / 313 通过，0 skip。
+- **C. 校准身份**：route = HYBRID；population = 31 道可答题 + 7 道计分陷阱；TR02 排除于主分母；gate statistic = max(match_score over 冻结 hybrid top-20)。
+- **D. 分离（`MEASURED`）**：trap_max = 0.7792718520928508；answer_min = 0.8012534982161421；observed gap = 0.021981646123291343。
+  计分陷阱 gate 0.7487373263590936 – 0.7792718520928508；可答题 gate 0.8012534982161421 – 0.9158319960994566。
+- **E. 取值选择**：机械提议 A = 0.7792718520928509（`CONSERVATIVE_LOW_NEXTAFTER`）；人工最终 B = 0.78；候选 C = 0.79。
+  选 B：A 只比 TR01 高一个 binary64 ULP，会把长期契约值绑定到单个极端样本的尾数；B 在当前数据上仍 7 / 7 陷阱拒答、0 / 31 误拒，只消耗约 3.3% 观测间隙；
+  C 没有增加当前分类收益却消耗约 48.8% 间隙。**没有证据证明 B 的泛化优于 A。**
+- **F. 同集结果（threshold 0.78，严格 `<`）**：计分陷阱拒答 7 / 7；可答题误拒 0 / 31。TR02：描述性预测拒答 = YES，不进主分母。不得写作泛化准确率。
+- **G. LOO（规则留一，`CONSERVATIVE_LOW_NEXTAFTER`）**：留出陷阱被拒 6 / 7，失败 = TR01；可答题误拒 7 折皆 0。`EXTREME_SAMPLE_DEPENDENCE = YES`。LOO 不是独立测试集。
+- **H. 解释**：`MIN_RELEVANCE = EMPIRICAL_OPERATING_THRESHOLD`；`HYBRID_MATCH_SCORE_IS_UNIFIED_CONFIDENCE = NO`。FL05 / FL14 的 gold 分低于阈值（0.7789 / 0.6891），
+  但 gate 分高于阈值（0.8013 / 0.8204）—— MIN_RELEVANCE 不是 gold-confidence threshold。
+- **I. 披露**：`SAME_SET_THRESHOLD_CALIBRATION = YES`；`S9_CALIBRATION_DATA_STATUS = SAME_SET_PROVISIONAL`；`DISCLOSED = YES`；`RETRIEVAL_RANKING_TUNING = NO`。
+- **J. 稳健性（`s9_threshold_robustness.json`）**：A 陷阱侧余量 1.1102230246251565e-16 / 可答题侧 0.021981646123291232；
+  B 0.0007281479071492569 / 0.021253498216142086；C 0.010728147907149266 / 0.011253498216142077。三者同集与固定值留一均 7 / 7、0 / 31。
+- **K. falsified_if**：hybrid scoring semantics 改变；production retrieval route 改变；reranker 进入 score / gating path；match_score construction 改变；
+  代表性校准数据显示 0.78 造成不可接受的可答题误拒或陷阱误放。同集校准不能作为无偏的泛化估计。
+- **artifact（sha256）**：`eval/calibrate_threshold.py` `850d88bb1e04ff8d4fd19d755b34fc5a76732edd18504880b7902d023d1a7ba7`；
+  `experiments/m1c_s9_threshold/s9_threshold_scores.csv` `a58ab19233b4066d42c2ae2d7c9baa92ad31ce02f95e1e7764abe85a1fcad73d`；
+  `s9_threshold_calibration.json` `7e289c23b00051bd4268aaaa20589d8436dda0b7f2cc32a356fc91caa9ed6d30`；
+  `s9_threshold_distribution.svg` `9904f7d80bead6a4575f5f12bafe3af414a0a1247189535565a32d11a78c883a`；
+  `s9_threshold_run.log` `48cf92286cb7b5ee89f3af5b07f605d1c69e99a1c1774a01baace4ddbadf1552`；
+  `s9_threshold_robustness.json` `b5f6f2cd53528f8ab9be07ff920d115972e1f6c81ab152aa98afd235a90a1cb6`。
+  calibration.json 中的 `proposed_min_relevance = 0.7792718520928509` 是机械规则的提议、`current_contract_min_relevance = 0.35` 是运行时的契约值，二者均为历史测量，
+  不改写；人工最终 0.78 记录于本条与 contracts —— 层级不同，不冲突。
+- **L. 状态**：`S9_PROTOCOL_STATUS = FROZEN`；`S9_CALIBRATION_STATUS = CLOSED`；**`S9_OVERALL_STATUS = CLOSED`**。执行手册顺序下一步 = S10（冻结评测集 + 写 M2 预注册，本条不执行）；
+  S4a.9d 与 S10 的关系：authority 未规定（`NOT_SPECIFIED`）。

@@ -1,0 +1,64 @@
+{
+  "EXTREME_SAMPLE_DEPENDENCE": "YES",
+  "HYBRID_MATCH_SCORE_IS_UNIFIED_CONFIDENCE": "NO",
+  "MIN_RELEVANCE_INTERPRETATION": "EMPIRICAL_OPERATING_THRESHOLD (not a probability)",
+  "answer_min": 0.8012534982161421,
+  "candidates": {
+    "A": {
+      "answer_margin": 0.021981646123291232,
+      "depends_on_last_ulp_of_trap_max": true,
+      "fixed_value_answers_false_rejected": 0,
+      "fixed_value_heldout_traps_rejected": 7,
+      "fraction_of_separation_gap_consumed": 5.050681911618916e-15,
+      "human_readable_decimal": false,
+      "meaning": "exact CONSERVATIVE_LOW_NEXTAFTER result",
+      "same_set_answers_false_rejected": 0,
+      "same_set_scored_traps_rejected": 7,
+      "tr02_predicted_refuse_descriptive": true,
+      "trap_margin": 1.1102230246251565e-16,
+      "value": 0.7792718520928509
+    },
+    "B": {
+      "answer_margin": 0.021253498216142086,
+      "depends_on_last_ulp_of_trap_max": false,
+      "fixed_value_answers_false_rejected": 0,
+      "fixed_value_heldout_traps_rejected": 7,
+      "fraction_of_separation_gap_consumed": 0.033125267464738456,
+      "human_readable_decimal": true,
+      "meaning": "human-maintainable conservative operating value",
+      "same_set_answers_false_rejected": 0,
+      "same_set_scored_traps_rejected": 7,
+      "tr02_predicted_refuse_descriptive": true,
+      "trap_margin": 0.0007281479071492569,
+      "value": 0.78
+    },
+    "C": {
+      "answer_margin": 0.011253498216142077,
+      "depends_on_last_ulp_of_trap_max": false,
+      "fixed_value_answers_false_rejected": 0,
+      "fixed_value_heldout_traps_rejected": 7,
+      "fraction_of_separation_gap_consumed": 0.48805025096741594,
+      "human_readable_decimal": true,
+      "meaning": "modest use of the observed separation margin",
+      "same_set_answers_false_rejected": 0,
+      "same_set_scored_traps_rejected": 7,
+      "tr02_predicted_refuse_descriptive": true,
+      "trap_margin": 0.010728147907149266,
+      "value": 0.79
+    }
+  },
+  "fixed_value_sensitivity_note": "FIXED_VALUE_SENSITIVITY_ONLY: each held-out trap is checked against the fixed candidate (no refit); not a new cross-validation protocol. With a fixed value it equals the same-set trap rejection by construction.",
+  "original_rule_loo": {
+    "failed_held_out": "TR01",
+    "held_out_traps_rejected": "6/7",
+    "reason": "TR01 has the largest gate_score among the 7 scored traps; the nextafter rule is defined by that single extreme trap"
+  },
+  "separation_gap": 0.021981646123291343,
+  "source": {
+    "calibration_json_sha256": "7e289c23b00051bd4268aaaa20589d8436dda0b7f2cc32a356fc91caa9ed6d30",
+    "scores_csv": "experiments/m1c_s9_threshold/s9_threshold_scores.csv",
+    "scores_csv_sha256": "a58ab19233b4066d42c2ae2d7c9baa92ad31ce02f95e1e7764abe85a1fcad73d"
+  },
+  "status": "S9 MIN_RELEVANCE robustness check over 3 human-predeclared candidates; no search, no new candidate; contracts unchanged",
+  "trap_max": 0.7792718520928508
+}

@@ -1,0 +1,64 @@
+{
+  "SAME_SET_PROVISIONAL": "YES",
+  "TEST_SET_THRESHOLD_CALIBRATION": "YES",
+  "contracts_version": "0.4.0",
+  "event": "s9_calibration_run",
+  "git": {
+    "head": "73bdbc571bc543d9bffed67553c3a4db83ab3f84",
+    "tracked_changes": [
+      " M DECISIONS.md"
+    ]
+  },
+  "inputs": {
+    "bm25": {
+      "path": "experiments/m1c_s8_bm25/s8_bm25_results.jsonl",
+      "sha256": "9ce4df232af8c395e0749dcb2fd9c84e5376a7939ae20af7005b12d54dac3ba8"
+    },
+    "gold_chunk_map": {
+      "path": "eval/gold_chunk_map/map__ts-v5.3__corpus-c8978777__builder-kaiva_phase_b_builder_v1.json",
+      "sha256": "8cf9f3be1b1bc296c196d1b5598c1351d456f83b1a05a6043c7b643f0fedeacc"
+    },
+    "hybrid": {
+      "path": "experiments/m1c_s8_hybrid/s8_hybrid_results.jsonl",
+      "sha256": "5d859a901f49155aa8be6f4e84f3b79bf8e564261d026f0397ef54a1cff5e9a8"
+    },
+    "testset": {
+      "path": "eval/testset_v5_3.jsonl",
+      "sha256": "05614407a0e43a7f912ae17864892b0f069a22d1ad9d1ec2bfb7362150883e8b"
+    },
+    "vector": {
+      "path": "experiments/m1c_s8_vector/s8_vector_results.jsonl",
+      "sha256": "0e80682cfded9fb73db0b9204120582984f33604ab5bfbc88694d47f9d371073"
+    }
+  },
+  "normative_sha256": {
+    "csv": "a58ab19233b4066d42c2ae2d7c9baa92ad31ce02f95e1e7764abe85a1fcad73d",
+    "json": "7e289c23b00051bd4268aaaa20589d8436dda0b7f2cc32a356fc91caa9ed6d30",
+    "svg": "9904f7d80bead6a4575f5f12bafe3af414a0a1247189535565a32d11a78c883a"
+  },
+  "protocol": {
+    "file": "DECISIONS.md",
+    "heading": "## 2026-10-02 · S9 MIN_RELEVANCE calibration protocol",
+    "line": 4608
+  },
+  "run_at_utc": "2026-10-02T08:03:25Z",
+  "run_b": {
+    "byte_identical": true,
+    "pythonhashseed": "4242",
+    "returncode": 0
+  },
+  "script_sha256": "850d88bb1e04ff8d4fd19d755b34fc5a76732edd18504880b7902d023d1a7ba7",
+  "summary": {
+    "answer_min": 0.8012534982161421,
+    "candidate_threshold": 0.7792718520928509,
+    "perfect_same_set_separation": true,
+    "proposed_min_relevance": 0.7792718520928509,
+    "same_set": {
+      "answer_false_rejected": 0,
+      "answers_n": 31,
+      "scored_traps_n": 7,
+      "scored_traps_rejected": 7
+    },
+    "trap_max": 0.7792718520928508
+  }
+}
