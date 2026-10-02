@@ -4527,3 +4527,79 @@ M1c prereg §7.5 / §11、DECISIONS D2 与 prerequisite 条目、contracts Reran
 
 - `FAILURE_ATTRIBUTION = CLOSED`；`RERANKER_PREREQUISITE_STATUS = SATISFIED`；`RERANKER_L1_DECISION = EVALUATE_RERANKER_SUBJECT_TO_LATENCY`；
   `TOP_K_RETRIEVE_L1_DECISION = KEEP_20_FOR_CURRENT_M1C`；**`S8_OVERALL_STATUS = OPEN`**（剩余：GATE-E3 人工判断与 models.yaml 记账；S8 收尾）。
+
+
+## 2026-10-02 · S8 / M1c retrieval baseline closure
+
+**`S8_OVERALL_STATUS = CLOSED`。** 执行手册 S8.4 / S8.5 要求的输出已全部完成（见 G）。本条汇总已落盘的正式结论，不引入新的测量或协议。
+
+### A. 三路正式 baseline 身份
+
+| route | protocol | implementation | evidence commit | results sha256 |
+|---|---|---|---|---|
+| BM25 | b88d534 / 693f959（contracts 0.4.0 + prereg） | 3511aa0 | 56c5990 | `9ce4df232af8c395e0749dcb2fd9c84e5376a7939ae20af7005b12d54dac3ba8` |
+| vector | 5443495（D-V1–D-V10，prereg §15） | 1a7c674 | 5b5a7ef | `0e80682cfded9fb73db0b9204120582984f33604ab5bfbc88694d47f9d371073` |
+| hybrid | a0a9241（H1–H10，prereg §16） | 1e07e1b | b0a88d5 | `5d859a901f49155aa8be6f4e84f3b79bf8e564261d026f0397ef54a1cff5e9a8` |
+
+- 冻结输入：corpus `c8978777…` / 3409；testset v5.3 `05614407…` / 39；GoldChunkMap `8cf9f3be…`；`CONTRACTS_VERSION = 0.4.0`。三路均 39 / 39、Run A / B 逐字节相同、独立复算 PASS、
+  `TEST_SET_TUNING_PERFORMED = NO`、`PROTOCOL_DRIFT = NO`。
+- 后续 S8 commits：失败归因 3fb6e6a / 723594b / ea1544a；real-window measurement b409b41；L1 决策 17d4d17。
+
+### B. headline（31 道可答题，ANY_GOLD macro；`DESCRIPTIVE_ONLY`）
+
+| route | @1 | @2 | @5 | @20 |
+|---|---|---|---|---|
+| BM25 | 0.452 | 0.548 | 0.742 | 0.871 |
+| vector | 0.645 | 0.871 | 0.935 | 0.968 |
+| hybrid | 0.581 | 0.710 | 0.903 | 1.000 |
+
+GOLD_COVERAGE / ALL_MAPPED_GOLD 见各 component closure；ALL_MAPPED_GOLD 仍为 strict map-union diagnostic。retrieval / evidence coverage ≠ answer quality。
+
+### C. 主要结论（均已在各自条目落盘）
+
+- **候选召回**：hybrid top-20 含 gold = 31 / 31，当前 M1c 没有 hybrid top-20 candidate miss。
+- **前排质量**：vector top-2 = 27 / 31，hybrid top-2 = 22 / 31；简单 unweighted RRF 没有改善当前 top-2 排序（`DESCRIPTIVE_ONLY`，不据此改 RRF）。
+- **真实 context window**：当前可执行打包契约（MAX_PROMPT_TOKENS 1050、PROMPT_OVERHEAD_RESERVE_TOKENS 200、CONTEXT_PACK_MARGIN 0.90、
+  CONTEXT_PACK_BUDGET_TOKENS 765）下，三路 realized k 中位数 = 2、众数 = 2 —— 当前 evidence window 通常只容纳约 2 个 chunk。
+- **reranker**：K_CONTEXT = 2；主指标 ANY_GOLD；hybrid ANY@2 = 22 / 31、ANY@20 = 31 / 31 → `RERANKER_CASE = CASE_B` →
+  **`RERANKER_L1_DECISION = EVALUATE_RERANKER_SUBJECT_TO_LATENCY`**（不是"reranker required"）。
+- **candidate depth**：**`TOP_K_RETRIEVE_L1_DECISION = KEEP_20_FOR_CURRENT_M1C`**，不外推为普遍足够。
+- **失败归因（人工）**：chunk_boundary = PR03、PR04；bm25_miss = ML01、ML02；vector_miss = FL14；NO_RETRIEVAL_FAILURE = 8；fusion_miss = 0；parse_failure = 0。
+- **CD01**：检索归因 NO_RETRIEVAL_FAILURE；三路 realized k = 2 / 2 / 2，packed gold coverage = 1/5 / 1/5 / 1/5；当前主要风险是 packing / context availability，
+  不是 candidate retrieval miss。正式写入 M2 预注册「预期最可能结果」延后到 M2 预注册创建时；handoff `experiments/m1c_s8_handoff/m2_prereg_handoff.md`
+  已就位（人工裁决：不阻塞 S8 closure）。
+- **token estimator**：`TOKEN_ESTIMATOR_FALSE_SAFE_OBSERVED = YES`（hybrid TR03：估算判安全，proxy actual + reserve 超过 MAX_PROMPT_TOKENS）—— 属 numeric
+  token-contract / S4a.9d evidence，不阻塞 S8 closure。
+
+### [L2] D. GATE-E3（bge-m3 多语种，人工裁决）
+
+- **决策：`GATE_E3_MULTILINGUAL = PASS_FOR_M1C`**（Arya，2026-10-02）。依据（formal vector baseline，evidence commit 5b5a7ef，
+  `s8_vector_metrics.json` `aa404fa9e1a33c3d1d3c87c5dde2624c70fc68471c6d79b16a56e37c0b286599`）：ML01（zh）first_gold_rank = 2，ML02（tl）= 1，ML03（hi）= 2；
+  multilingual ANY_GOLD@2 = 3 / 3 —— 对实施方案 §12.7 的判据"该语言的查询能否召回正确的英文 chunk"，在当前 M1c 冻结评测的三道多语种题上为 YES。
+- 边界：n = 3，zh / tl / hi 各一题；不证明 production multilingual coverage、所有语言、所有 query 类型、generation quality 或船端 x86 等价。
+  不得写"bge-m3 multilingual universally validated"。
+- 台账：`experiments/models.yaml` bge-m3 条目 `gate_e3_multilingual: PASS`（台账状态词表只有 PASS / FAIL / TODO，M1c 作用域写在 evidence 中）、
+  `gate_e3_evidence` 记录上述来源、数值、scope、sample_size 与 limitation；其他字段与条目未改。
+
+### E. TTFT 边界
+
+- `TTFT_BUDGET_10S_STATUS = BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED`；180 s = `EXPLORATORY_UPPER_BOUND_ONLY`。MAX_PROMPT_TOKENS 与 context budget 未改。
+- real-window evidence 显示当前契约通常只容纳约 2 个 chunk —— 这是后续 numeric token-contract / TTFT–quality operating-point 决策的重要输入。
+
+### F. S8 closure 不意味着
+
+reranker 已实现；reranker 已通过 latency gate；numeric token contract 已冻结；S4a.9d 已完成；M2 预注册已创建；generator 已实现；LoRA 已运行；M2 已运行；
+船端 x86 已验证（`SHIP_X86_EQUIVALENCE = NOT_MEASURED`）。
+
+### G. 执行手册 S8.4 / S8.5 输出核对
+
+三路正式 baseline、逐题明细、多语种单独报告、GATE-E3 evidence 与人工判断、CD01 单独观察、CD01 → M2 预注册 handoff（正式写入在 M2 预注册创建时）、
+失败归因（CLOSED）、reranker 前提（SATISFIED）、`[L2] M1c 检索基线`、`[L1] 是否引入 reranker`（带 falsified_if）、TOP_K_RETRIEVE 决策 —— 全部完成。
+`S8_REQUIRED_OUTPUTS_REMAINING = []`。执行手册 S8.4 中"Recall@1/2/3/20 清单""cross_doc 按每份手册算"已被 D1 / D2 取代（2026-10-01 docs followup 已登记）。
+
+### 状态与下一步
+
+- **`S8_OVERALL_STATUS = CLOSED`**。
+- 执行手册附录 C 顺序 S8 → S9；S9（MIN_RELEVANCE 校准）的前置是"S8 的逐题明细（含 retrieval scores）"，已由三份冻结 artifact 满足 → `NEXT_STEP = S9`（本条不执行）。
+  S9 开始时须处理：prereg `S9_CALIBRATION_SEMANTICS = DEFERRED`；`HYBRID_MATCH_SCORE_IS_UNIFIED_CONFIDENCE = NO`；手册 S9.1 引用的
+  `eval/calibrate_threshold.py` 与 `eval/m1c_items__*.csv` 在仓库中不存在。S4a.9d 与 S9 的关系：authority 未规定（`NOT_SPECIFIED`）。

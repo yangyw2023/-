@@ -388,8 +388,20 @@ models:
     dim: 1024                         # 影响索引包体积与岸船一致性校验（IndexManifest）
     gate_e1_runtime: TODO             # 船端能否算查询向量。Ollama 可用 ≠ 船端可用
     gate_e2_license: TODO
-    gate_e3_multilingual: TODO        # ⚠️ 硬门，不是烟雾测试
-    gate_e3_evidence: null            # 填 M1c 里多语种题的检索 Recall
+    gate_e3_multilingual: PASS        # ⚠️ 硬门，不是烟雾测试。人工裁决 PASS_FOR_M1C（2026-10-02），仅限 M1c 作用域，见 gate_e3_evidence
+    gate_e3_evidence: |
+      人工裁决 PASS_FOR_M1C（Arya，2026-10-02；DECISIONS "S8 / M1c retrieval baseline closure"）。
+      判据（实施方案 §12.7）：该语言的查询能否召回正确的英文 chunk。
+      source: formal S8 vector baseline（bge-m3:latest，POST /api/embed，MAC_DEFAULT_METAL）
+      vector component commit: 5b5a7ef288592c6a7d1f6a5e48c8f8266d261e7a
+      vector metrics artifact: experiments/m1c_s8_vector/s8_vector_metrics.json
+        sha256 aa404fa9e1a33c3d1d3c87c5dde2624c70fc68471c6d79b16a56e37c0b286599
+      first_gold_rank: ML01 zh = 2；ML02 tl = 1；ML03 hi = 2
+      multilingual ANY_GOLD@2 = 3/3（对照 English 28 题 ANY_GOLD@2 = 24/28）
+      scope: current M1c frozen evaluation only（testset v5.3 / corpus c8978777… / GoldChunkMap 8cf9f3be…）
+      sample_size: 3（zh / tl / hi 各一题）
+      limitation: 不是 production multilingual validation；不证明其他语言、其他 query 类型、
+        generation quality，也不证明船端 x86 等价（SHIP_X86_EQUIVALENCE = NOT_MEASURED）。
     notes: |
       ⚠️ embedder 的多语种是【承重的】，不是加分项。
       embedder 不懂印地语 → ML03 在检索阶段就死了 → B/D 臂拿什么模型生成都无所谓。
