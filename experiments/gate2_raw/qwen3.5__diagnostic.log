@@ -1,0 +1,9 @@
+0.00.252.559 E llama_model_load: error loading model: error loading model hyperparameters: key qwen35.rope.dimension_sections has wrong array length; expected 4, got 3
+0.00.252.561 E llama_model_load_from_file_impl: failed to load model
+0.00.252.588 E common_fit_params: encountered an error while trying to fit params to free device memory: failed to load model
+0.00.419.321 E llama_model_load: error loading model: error loading model hyperparameters: key qwen35.rope.dimension_sections has wrong array length; expected 4, got 3
+0.00.419.323 E llama_model_load_from_file_impl: failed to load model
+0.00.419.325 E cmn  common_init_: failed to load model '/Users/developer/.ollama/models/blobs/sha256-81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490'
+0.00.419.327 E srv    load_model: failed to load model, '/Users/developer/.ollama/models/blobs/sha256-81fb60c7daa80fc1123380b98970b320ae233409f0f71a72ed7b9b0d62f40490'
+0.00.419.651 E srv  llama_server: exiting due to model loading error
+llama_server exited with code 1

@@ -1,0 +1,96 @@
+==== S4a.9c-final · canonical corpus recalibration —— PREREGISTRATION ====
+（写于任何本轮 token 统计计算之前；看到结果后不得修改）
+
+A. TOKENIZER / RENDERING IDENTITY（沿用 S4a.9 已用协议，机械确认）
+   ollama 0.34.0；model = phi4-mini:latest
+   model_digest = 78fad5d182a7c33065e153a5f8ba210754207ba9d91973f57dffa7f487363753
+     （与 _s4a9c_final_real_chunks.log / _s4a9c_overbudget_attribution.log 记录一致）
+   count method = POST /api/generate raw=true stream=false，读 prompt_eval_count，
+                  options: num_ctx=4096, num_predict=1
+   空 prompt 不作 probe；缺 prompt_eval_count 一律抛异常。
+   render_j = "[{doc_id} §{section} PDF p.{pdf_page}]" + "\n" + text
+   chars = len(str)（Unicode 码点，与 Chunk.est_tokens 同口径）
+   percentile = 线性插值
+
+B. POPULATION
+   primary = canonical corpus/chunks.jsonl 全部 3409 chunks
+   sha256 = c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb
+   不排除 OCR chunks / 长 chunks / outliers / none_observed；不按结果筛样本。
+
+C. PRIMARY ESTIMATOR EVALUATION（两个量严格区分）
+   est_tokens        = Chunk.est_tokens()        = max(1, chars // CHARS_PER_TOKEN_EST)   不含引用头
+   est_prompt_tokens = Chunk.est_prompt_tokens() = est_tokens + CITATION_HEADER_EST_TOKENS 含引用头
+   actual_text_tokens     = count(text)
+   actual_rendered_tokens = count(render_j)
+   header_increment       = actual_rendered_tokens - actual_text_tokens
+   主比值 = actual_text_tokens / est_tokens；另报 actual_rendered / est_prompt。
+
+D. RENDERED-CONTEXT POPULATION（沿用旧 9c-final simulation，不改 header/separator/citation 格式）
+   窗口 = corpus 顺序每个起点取连续 5 个 chunk → N-4 = 3405 个窗口
+   packing = contracts.pack_context(hits, max_tokens=B, max_chunks=TOP_K_CONTEXT=5)
+             hits 以 relevance 降序构造（窗口内按位置递减），只用 est_prompt_tokens 做预算
+   actual_context = count(SEP.join(render_j for packed))  —— 对拼接串整体实测，非加性预测
+
+E. SEPARATOR MEASUREMENT（真实相邻 rendered chunk，不用孤立 "\n"）
+   对 corpus 顺序全部 3408 个相邻对：
+   sep_inc = count(render_i + SEP + render_{i+1}) - count(render_i) - count(render_{i+1})
+   SEP 候选 = "\n" 与 "\n\n"，两者都测。
+
+F. COMPARISON
+   old（8c6bee0a… / 3383）vs new（c8978777… / 3409）只做 descriptive comparison。
+   不得因"新旧接近"而推出沿用旧 contract；contract decision 留到下一轮。
+
+G. OUTLIER POLICY
+   全部保留。特别关注 "p50 保守但 upper tail 突破 margin" 的不对称形状。
+   旧标签定义原样复用（不得重新定义同名指标）：
+     control_chars      : text 或 section 匹配 [\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9fÿ�]
+     tacm_garbled       : doc_id=='TACM' 且 38<=pdf_page<=93 且 control_chars
+     whitespace_heavy   : text 中最长连续 [空格/\t] >= 140
+     section_suspicious : section 含异常字符 / 不含 [A-Za-z0-9] / 长度 > 60 / 空白占比 >= 0.5
+     none_observed      : 以上均不成立
+   （140 与 60 是旧轮按分布断档取的判断值，不是契约阈值；本轮原样沿用，不重新标定）
+
+H. 两套预算视角
+   A = CURRENT EXECUTABLE CONTRACT（本轮直接 import core.contracts 读取）
+       X=MAX_PROMPT_TOKENS  O=PROMPT_OVERHEAD_RESERVE_TOKENS  m=CONTEXT_PACK_MARGIN
+       B=CONTEXT_PACK_BUDGET_TOKENS
+   B = HISTORICAL CANDIDATE（NON-EXECUTABLE）X=950 O=206 m=0.86 → B=639
+   over-budget 判据（两套同形）：O + actual_context > X
+   同时报 estimated-safe-but-actual-over 与 estimated-over-but-actual-safe。
+
+I. 已知限制（事前声明）
+   窗口取 corpus 顺序连续 5 块，同页/同节、长度相关，不是 retrieval-selected chunk 的独立样本。
+   本轮结果只能用于 budget stress characterization，
+   不得冒充真实 retrieval overflow prevalence。
+
+J. 本轮不做的事
+   不修改 contracts / corpus / page_quality / parser / OCR artifacts / Design Freeze / testset / DECISIONS。
+   不因结果调整 measurement protocol；不为得到 k=2 或满足 950 而改口径。
+==== END ====
+
+==== AMENDMENT 1（写于任何全量结果产生之前；原 run 已在产出任何输出前终止，未观察到任何全量结论）====
+时间: 2026-09-24T17:5x+0800（见下方 sha 重算）
+原因: 修订后的轮次口径要求更完整的 measured output，而非改变任何判据。
+变更【仅为输出完整性】，不触及 tokenizer / population / estimator / rendering /
+window construction / overbudget 判据 / none_observed 定义 / separator 定义 / 阈值:
+  1. 脚本落到 scripts/s4a9c_final_canonical.py（原在 scratchpad）。
+  2. 新增持久化产物: separator 逐对 CSV、none_observed CSV、overbudget CSV。
+  3. 报告分位数扩展为 n/min/p1/p5/p10/p25/p50/p75/p90/p95/p99/max/mean；
+     危险尾部计数扩展为 >1.00/1.05/1.10/1.15/1.20/1.30/1.50。
+  4. 增加 descriptive breakdown: doc_id、body_source_channel、chunk ordinal（仅解释性，不做 feature fishing）。
+  5. 运行内加入 (window, sep) 结果缓存 —— 纯效率缓存，同一输入同一输出，不改语义；
+     Run 2 为完全独立进程，不复用 Run 1 的任何文件。
+判据、阈值、population、方向定义（ratio = actual / est，>1 = 低估 = 危险侧）均保持不变。
+
+==== 旧基线数值的出处更正（事实核对，非判据变更）====
+修订口径中引用的 "p50 0.777 / p95 1.033 / max 1.664" 在旧日志中的实际出处是
+_s4a9c_overbudget_attribution.log:171，属于 **none_observed 群体（n=3222）的
+rendered actual/est_prompt_tokens**，不是全语料 text actual/est。
+全语料旧值（_s4a9c_final_real_chunks.log §4b）为:
+  text   actual/est_tokens        : p50=0.778 p95=1.140 max=3.648
+  render actual/est_prompt_tokens : p50=0.775 p95=1.109 max=3.171
+none_observed 旧值（同日志 §5）:
+  text   actual/est_tokens        : p50=0.7804 p95=1.0580 max=1.7333
+  render actual/est_prompt_tokens : p50=0.7770 p95=1.0327 max=1.6640
+本轮 old→new 比较按各自同口径对齐，不混用。
+==== END AMENDMENT 1 ====

@@ -1,0 +1,48 @@
+==============================================================================
+model=qwen3:4b
+think=True
+ok=True
+eval_count=400
+thinking_field=PRESENT
+--- THINKING first 700 chars ---
+Okay, so I need to figure out how many times an emergency drill should be conducted on a ship. Let me think. I remember that in maritime safety, there are specific regulations about emergency drills. Maybe it's related to the International Maritime Organization (IMO) or some national maritime authority.
+
+First, I should recall the standard requirements. I think the SOLAS (Safety of Life at Sea) conventions have rules about this. SOLAS is a key international treaty for maritime safety. Let me try to remember. I think SOLAS Chapter II-1 requires regular emergency drills. But how often?
+
+Wait, maybe it's twice a year? Or maybe it's once a year? Hmm. I'm a bit confused. Let me try to break it do
+--- RESPONSE first 1200 chars ---
+
+==============================================================================
+model=qwen3:4b
+think=False
+ok=True
+eval_count=400
+thinking_field=absent
+--- RESPONSE first 1200 chars ---
+Okay, so I need to figure out how many times an emergency drill should be conducted on a ship. Let me think. I remember that in maritime safety, there are specific regulations about emergency drills. Maybe it's related to the International Maritime Organization (IMO) or some national maritime authority.
+
+First, I should recall the standard requirements. I think the SOLAS (Safety of Life at Sea) conventions have rules about this. SOLAS is a key international treaty for maritime safety. Let me try to remember. I think SOLAS Chapter II-1 requires regular emergency drills. But how often?
+
+Wait, maybe it's twice a year? Or maybe it's once a year? Hmm. I'm a bit confused. Let me try to break it down.
+
+In some countries, like India, the Indian Maritime Safety Authority (IMSA) might have their own regulations. But the question is in Hindi, so maybe it's referring to general international standards.
+
+Wait, the user is asking in Hindi: "जहाज पर आपातकालीन अभ्यास कितनी बार किया जाना चाहिए?" which translates to "How many times should emergency drills be conducted on a ship?"
+
+I think the standard answer here is that according to SOLAS, ships must conduct emergency drills at least once every thr
+==============================================================================
+model=phi4-mini:latest
+think=True
+ok=False
+ERROR:
+HTTP 400: {"error":"\"phi4-mini:latest\" does not support thinking"}
+==============================================================================
+model=phi4-mini:latest
+think=False
+ok=True
+eval_count=221
+thinking_field=absent
+--- RESPONSE first 1200 chars ---
+यह एक लोकप्रिय हिंदी कहानियाँ या लोककथाओं से लिया गया कथानक है, जहां एक जादूगर या एक साधु व्यक्ति को एक जादू या मंत्र का उपयोग करके एक जहाज को आपातकालीन स्थिति में चलाने के लिए कहा जाता है। हालांकि, यह एक काल्पनिक या सांस्कृतिक संदर्भ में है, क्योंकि जादू या मंत्रों का उपयोग वास्तविक दुनिया में जहाजों को चलाने के लिए कोई प्रमाणित विधि नहीं है।
+
+जहाजों को चलाने के लिए, आमतौर पर वैज्ञानिक और तकनीकी प्रगति का उपयोग किया जाता है, जैसे कि इंजनों, वायु प्रवाह, और जल प्रवाह के सिद्धांतों का उपयोग करके। यदि आप किसी विशेष कहानिका या साहित्यिक संदर्भ में "जादू" या "मंत्र" का उपयोग करते हुए एक जहाज चलाने की बात कर रहे हैं, तो कृपया अधिक संदर्भ प्रदान करें ताकि मैं आपकी सहायता कर सकूं कि आप किस प्रकार की कथा या शैली में रुचि रखते हैं।

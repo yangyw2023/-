@@ -1,0 +1,71 @@
+Phase B IMPLEMENTATION PRECHECK 0 —— OCR repeatability characterization
+==============================================================================
+§0 runtime provenance
+  python                  = 3.12.14
+  git_commit              = 3e5a248458e40839a9400ab76b81da2e9e09f890
+  script                  = ingest/run_ocr.py sha256=ad0b9396caba0a1353491bb5cdba66b686b2f42f7470153f322f9101e60d65be
+  ocr_artifact_module     = components/parsers/ocr_artifact.py sha256=ab58c5208709fcc1681885bf3fbd83acfa3315c1c691d44ed7e7d0b882b60820
+  rasterizer              = pdftoppm 26.09.0 dpi=300 format=pgm gray=True
+  ocr_engine              = tesseract 5.5.3
+  langpack                = eng path=/opt/homebrew/share/tessdata/eng.traineddata
+  langpack_identity_digest= 7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2
+  ocr_params_canonical    = {"engine":{"lang":"eng","name":"tesseract","oem":1,"outputs":["txt","tsv"],"psm":3},"env":{"OMP_THREAD_LIMIT":"1"},"raster":{"dpi":300,"format":"pgm","gray":true,"rasterizer":"pdftoppm"},"schema_version":1,"text_normalization":"crlf_to_lf; drop_form_feed; rstrip_each_line; single_trailing_newline"}
+  ocr_params_digest       = c9dfb8428b4c1534f91ca520291876352ce32a5224802f9ef66006a3eab0edb4
+  cache_dir               = ocr_cache
+
+§1 逐页两次独立执行的比较（同 source / page / raster / engine / langpack / params）
+
+  TACM:60      byte_identical=True
+    raster_sha256   run1=8d98c451026983e057f0e2226d24659a  run2=8d98c451026983e057f0e2226d24659a
+    text_raw_sha256 run1=d80ca678cb673f0ea6e5c8e37f8c1ffe  run2=d80ca678cb673f0ea6e5c8e37f8c1ffe
+    artifact_sha256 run1=d30824c09c8db234e27a7b3f559f156f  run2=d30824c09c8db234e27a7b3f559f156f
+    normalized_text_chars=454  confidence_stats={"mean_conf": 95.428, "min_conf": 90.402, "p05_conf": 91.576, "word_count": 65}
+    accepted_artifact=accepted/de2816e02c055613c79d3c04dc91eb911ab1d27e5dc46d4af97b03e72c09ccb4/p0060-d30824c09c8db234.json sha256=d30824c09c8db234e27a7b3f559f156f795db99ddaaeecbe0ee502ee9475ec3f
+
+  TACM:51      byte_identical=True
+    raster_sha256   run1=cc1f6a670f20c8932c862aa34549b884  run2=cc1f6a670f20c8932c862aa34549b884
+    text_raw_sha256 run1=714b5d655ae0694a27fe72c8c8cf1e40  run2=714b5d655ae0694a27fe72c8c8cf1e40
+    artifact_sha256 run1=d98a68895183c5734b864ae3e474413a  run2=d98a68895183c5734b864ae3e474413a
+    normalized_text_chars=744  confidence_stats={"mean_conf": 94.528, "min_conf": 33.854, "p05_conf": 90.865, "word_count": 115}
+    accepted_artifact=accepted/de2816e02c055613c79d3c04dc91eb911ab1d27e5dc46d4af97b03e72c09ccb4/p0051-d98a68895183c573.json sha256=d98a68895183c5734b864ae3e474413a856f71ee559c2e0882178f038e55bd2b
+
+  CMM:112      byte_identical=True
+    raster_sha256   run1=ddd253f20b8c4d0727be1461255b5652  run2=ddd253f20b8c4d0727be1461255b5652
+    text_raw_sha256 run1=2e92231097b0e30927f13a9936adfadf  run2=2e92231097b0e30927f13a9936adfadf
+    artifact_sha256 run1=5e2bd2f85cf0d8d512f1a854f217db84  run2=5e2bd2f85cf0d8d512f1a854f217db84
+    normalized_text_chars=4244  confidence_stats={"mean_conf": 93.968, "min_conf": 14.383, "p05_conf": 83.053, "word_count": 594}
+    accepted_artifact=accepted/d5019c262f2ae0ebe54f95ce39c4125b0c94805d4a8c44445e5b6d4ce8323883/p0112-5e2bd2f85cf0d8d5.json sha256=5e2bd2f85cf0d8d512f1a854f217db84726dd7a4a27b09d4eff214d6fc452abf
+
+  ERM:17       byte_identical=True
+    raster_sha256   run1=8651141690997e2a3e8f7cc1bee02a1a  run2=8651141690997e2a3e8f7cc1bee02a1a
+    text_raw_sha256 run1=821f6497be2ba69fb96b92541e810537  run2=821f6497be2ba69fb96b92541e810537
+    artifact_sha256 run1=7338ff3f12a75f313b3453b4cf1b0da3  run2=7338ff3f12a75f313b3453b4cf1b0da3
+    normalized_text_chars=2537  confidence_stats={"mean_conf": 92.951, "min_conf": 0.0, "p05_conf": 81.511, "word_count": 412}
+    accepted_artifact=accepted/2a2a66b7531928aa3e4496a53f14806f289f255fe8c025bbdfaed40566236816/p0017-7338ff3f12a75f31.json sha256=7338ff3f12a75f313b3453b4cf1b0da38cfa1475bbd631f6c6a73224d0027c0e
+
+  QMM:139      byte_identical=True
+    raster_sha256   run1=51d4245b927b8e1bcd4186bfc824687b  run2=51d4245b927b8e1bcd4186bfc824687b
+    text_raw_sha256 run1=be50f77ef8488880a9b354cd86527c8f  run2=be50f77ef8488880a9b354cd86527c8f
+    artifact_sha256 run1=8368162435ec7dc7904687ab16b4238d  run2=8368162435ec7dc7904687ab16b4238d
+    normalized_text_chars=1243  confidence_stats={"mean_conf": 91.235, "min_conf": 0.0, "p05_conf": 67.911, "word_count": 193}
+    accepted_artifact=accepted/7896c8e80505c040f606740d9ac8d486e915989ecada9a2c06edccf0f96a18e7/p0139-8368162435ec7dc7.json sha256=8368162435ec7dc7904687ab16b4238daddfa5e50b822bf219f386c66f44957c
+
+  TACM:55      byte_identical=True
+    raster_sha256   run1=8973d4281178c9484e5324a465540435  run2=8973d4281178c9484e5324a465540435
+    text_raw_sha256 run1=e3b0c44298fc1c149afbf4c8996fb924  run2=e3b0c44298fc1c149afbf4c8996fb924
+    artifact_sha256 run1=d4249b078e6a70f02782abd6529639c9  run2=d4249b078e6a70f02782abd6529639c9
+    normalized_text_chars=0  confidence_stats={"mean_conf": -1.0, "min_conf": -1.0, "p05_conf": -1.0, "word_count": 0}
+    accepted_artifact=accepted/de2816e02c055613c79d3c04dc91eb911ab1d27e5dc46d4af97b03e72c09ccb4/p0055-d4249b078e6a70f0.json sha256=d4249b078e6a70f02782abd6529639c9b8b3444028b73c8f46221cf4111b21b9
+
+  CMM:32       byte_identical=True
+    raster_sha256   run1=3031a6457153f90c248225bb8d92b36c  run2=3031a6457153f90c248225bb8d92b36c
+    text_raw_sha256 run1=c9967c0d66a1de72b9c443c47d1f7365  run2=c9967c0d66a1de72b9c443c47d1f7365
+    artifact_sha256 run1=4fb6d3f8002f271d97414a8fba840278  run2=4fb6d3f8002f271d97414a8fba840278
+    normalized_text_chars=2593  confidence_stats={"mean_conf": 94.444, "min_conf": 27.626, "p05_conf": 86.649, "word_count": 438}
+    accepted_artifact=accepted/d5019c262f2ae0ebe54f95ce39c4125b0c94805d4a8c44445e5b6d4ce8323883/p0032-4fb6d3f8002f271d.json sha256=4fb6d3f8002f271d97414a8fba840278af313b1dfc2fd765dacdf7340644faa0
+
+§2 OCR_REPEATABILITY_RESULT = observed_deterministic_under_tested_configuration
+  ⚠️ 该结论只对本次测试配置成立：不得外推到其他 Tesseract 版本、其他 traineddata、
+     其他 DPI、其他参数或其他机器。
+  ⚠️ OCR runtime available != OCR repeatability characterized != OCR body usable
+     != citation metadata supported != S5c PASS。

@@ -1,0 +1,339 @@
+{
+  "identity": {
+    "server_version": "0.34.0",
+    "details": {
+      "parent_model": "",
+      "format": "gguf",
+      "family": "bert",
+      "families": [
+        "bert"
+      ],
+      "parameter_size": "566.70M",
+      "quantization_level": "F16"
+    },
+    "embedding_length": 1024,
+    "context_length": 8192,
+    "pooling_type": 2,
+    "manifest_sha256": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab"
+  },
+  "execution_path_default": [
+    {
+      "name": "bge-m3:latest",
+      "size": 673049476,
+      "size_vram": 673049476,
+      "gpu_fraction": 1.0
+    }
+  ],
+  "dimension": {
+    "distinct": [
+      1024
+    ],
+    "per_input": {
+      "P1_en_short": 1024,
+      "P2_en_technical": 1024,
+      "P3_zh": 1024,
+      "P4_tl": 1024,
+      "P5_punct_numeric_unit": 1024,
+      "C0_CRM:p1:0": 1024,
+      "C1704_FMM:p130:2": 1024,
+      "C3408_TACM:p120:0": 1024,
+      "single:P1_en_short": 1024,
+      "single:P2_en_technical": 1024,
+      "single:P3_zh": 1024,
+      "single:P4_tl": 1024,
+      "single:P5_punct_numeric_unit": 1024,
+      "single:C0_CRM:p1:0": 1024,
+      "single:C1704_FMM:p130:2": 1024,
+      "single:C3408_TACM:p120:0": 1024
+    }
+  },
+  "finite_all": true,
+  "norms_api_embed_batch": {
+    "P1_en_short": 1.0000001161984453,
+    "P2_en_technical": 1.0000006346218335,
+    "P3_zh": 1.0000001421357148,
+    "P4_tl": 1.0000001056036403,
+    "P5_punct_numeric_unit": 0.9999999389623162,
+    "C0_CRM:p1:0": 1.0000004385631835,
+    "C1704_FMM:p130:2": 0.9999997574135964,
+    "C3408_TACM:p120:0": 0.9999999741340229
+  },
+  "zero_vectors": [],
+  "single_vs_batch": {
+    "P1_en_short": {
+      "exact_equal": true,
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "cosine": 1.0
+    },
+    "P2_en_technical": {
+      "exact_equal": true,
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "cosine": 0.9999999999999998
+    },
+    "P3_zh": {
+      "exact_equal": true,
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "cosine": 0.9999999999999998
+    },
+    "P4_tl": {
+      "exact_equal": true,
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "cosine": 1.0
+    },
+    "P5_punct_numeric_unit": {
+      "exact_equal": true,
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "cosine": 0.9999999999999999
+    },
+    "C0_CRM:p1:0": {
+      "exact_equal": true,
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "cosine": 1.0000000000000002
+    },
+    "C1704_FMM:p130:2": {
+      "exact_equal": true,
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "cosine": 1.0
+    },
+    "C3408_TACM:p120:0": {
+      "exact_equal": true,
+      "max_abs_diff": 0.0,
+      "max_rel_diff": 0.0,
+      "cosine": 1.0
+    }
+  },
+  "edge_inputs": {
+    "P6a_empty": {
+      "n_vectors": 0,
+      "dims": [],
+      "norms": []
+    },
+    "P6b_whitespace": {
+      "n_vectors": 1,
+      "dims": [
+        1024
+      ],
+      "norms": [
+        0.999999992050432
+      ]
+    }
+  },
+  "legacy_endpoint": {
+    "P1_en_short": {
+      "dim": 1024,
+      "norm": 25.08387244323854,
+      "vs_api_embed": {
+        "exact_equal": false,
+        "max_abs_diff": 6.497483911358643,
+        "max_rel_diff": 24.0838718244168,
+        "cosine": 0.9999999999999996
+      }
+    },
+    "P2_en_technical": {
+      "dim": 1024,
+      "norm": 25.703172152633098,
+      "vs_api_embed": {
+        "exact_equal": false,
+        "max_abs_diff": 6.328227012816162,
+        "max_rel_diff": 24.703158202074757,
+        "cosine": 0.9999999999999993
+      }
+    },
+    "P3_zh": {
+      "dim": 1024,
+      "norm": 25.62951763692702,
+      "vs_api_embed": {
+        "exact_equal": false,
+        "max_abs_diff": 6.1029379381359865,
+        "max_rel_diff": 24.629516641137158,
+        "cosine": 0.9999999999999994
+      }
+    }
+  },
+  "prefix_probe": {
+    "P2_en_technical": {
+      "query_prefix_accepted_dim": 1024,
+      "query_prefix_deterministic": true,
+      "cos_raw_vs_query_prefixed": 0.830273245128084,
+      "cos_raw_vs_document_prefixed": 0.952707360816077,
+      "norms": {
+        "query_prefixed": 0.9999999158381524,
+        "document_prefixed": 0.9999999271695761
+      }
+    },
+    "C0_CRM:p1:0": {
+      "query_prefix_accepted_dim": 1024,
+      "query_prefix_deterministic": true,
+      "cos_raw_vs_query_prefixed": 0.907335731800313,
+      "cos_raw_vs_document_prefixed": 0.9512085307780564,
+      "norms": {
+        "query_prefixed": 0.9999998152981049,
+        "document_prefixed": 0.9999999691473962
+      }
+    }
+  },
+  "truncation_probe": {
+    "input": "C1704_FMM:p130:2",
+    "chars": 1515,
+    "truncate_true": {
+      "prompt_eval_count": 210,
+      "error": null
+    },
+    "truncate_false": {
+      "prompt_eval_count": 210,
+      "error": null,
+      "equal_to_truncate_true": true
+    }
+  },
+  "execution_path_cpu_forced": [
+    {
+      "name": "bge-m3:latest",
+      "size": 1218969598,
+      "size_vram": 0,
+      "gpu_fraction": 0.0
+    }
+  ],
+  "cpu_forced_vs_default": {
+    "P1_en_short": {
+      "exact_equal": false,
+      "max_abs_diff": 0.00034274299999999995,
+      "max_rel_diff": 11.819212368400033,
+      "cosine": 0.9999962491902137
+    },
+    "P2_en_technical": {
+      "exact_equal": false,
+      "max_abs_diff": 0.0004000670000000005,
+      "max_rel_diff": 19.209351331205415,
+      "cosine": 0.9999927124548095
+    },
+    "P3_zh": {
+      "exact_equal": false,
+      "max_abs_diff": 0.00038725629999999955,
+      "max_rel_diff": 0.8813352839809475,
+      "cosine": 0.9999932825649344
+    },
+    "P4_tl": {
+      "exact_equal": false,
+      "max_abs_diff": 0.0003789720000000017,
+      "max_rel_diff": 4.647621015183861,
+      "cosine": 0.9999927050736882
+    },
+    "P5_punct_numeric_unit": {
+      "exact_equal": false,
+      "max_abs_diff": 0.0001077099999999831,
+      "max_rel_diff": 0.5565222010862176,
+      "cosine": 0.9999995542604619
+    },
+    "C0_CRM:p1:0": {
+      "exact_equal": false,
+      "max_abs_diff": 0.00021492709999999977,
+      "max_rel_diff": 3.2901205513845055,
+      "cosine": 0.9999981785523474
+    },
+    "C1704_FMM:p130:2": {
+      "exact_equal": false,
+      "max_abs_diff": 9.779999999999858e-05,
+      "max_rel_diff": 0.56172190398668,
+      "cosine": 0.9999996470229725
+    },
+    "C3408_TACM:p120:0": {
+      "exact_equal": false,
+      "max_abs_diff": 0.00012337200000000006,
+      "max_rel_diff": 4.493894933795989,
+      "cosine": 0.9999991917916315
+    }
+  },
+  "run_ab": {
+    "batch_digests_equal": true,
+    "single_digests_equal": true,
+    "run_b_processor": [
+      {
+        "name": "bge-m3:latest",
+        "size": 673049476,
+        "size_vram": 673049476,
+        "gpu_fraction": 1.0
+      }
+    ],
+    "differing_batch": [],
+    "differing_single": []
+  },
+  "vector_digests_run_a": {
+    "batch": {
+      "P1_en_short": "5e12cb36893a961f46ddc21a701c7fb64ad2724f0af52b3756285db33e60bd52",
+      "P2_en_technical": "557095d3f6d582b96be1b8684a6a9f7209143497e36940d7f8ac765a3a4765ed",
+      "P3_zh": "33cccab2e68fed8f4f3a6caf11e529e945d5f2014e106032313add559e9f72fb",
+      "P4_tl": "a2adda4c5d0dba56c3c840b51e3c46e594a54710903b4cc3134e050d3fdd240c",
+      "P5_punct_numeric_unit": "b1f594434928f6de28583babbac823fa8b9aea42700b9c75982e9873d2920286",
+      "C0_CRM:p1:0": "b67340725c466425ba277df4b43dcf6a94a241673c6aedd1bc77bfd3f68877dd",
+      "C1704_FMM:p130:2": "33a5c47461cff983853d78ad348d4da2eb49dbda9c7e27e240c2a1558d98d344",
+      "C3408_TACM:p120:0": "057d1070a6e4aa1537ba7782c076a6f5c750326eeace61d853bcc4419bac6af9"
+    },
+    "single": {
+      "P1_en_short": "5e12cb36893a961f46ddc21a701c7fb64ad2724f0af52b3756285db33e60bd52",
+      "P2_en_technical": "557095d3f6d582b96be1b8684a6a9f7209143497e36940d7f8ac765a3a4765ed",
+      "P3_zh": "33cccab2e68fed8f4f3a6caf11e529e945d5f2014e106032313add559e9f72fb",
+      "P4_tl": "a2adda4c5d0dba56c3c840b51e3c46e594a54710903b4cc3134e050d3fdd240c",
+      "P5_punct_numeric_unit": "b1f594434928f6de28583babbac823fa8b9aea42700b9c75982e9873d2920286",
+      "C0_CRM:p1:0": "b67340725c466425ba277df4b43dcf6a94a241673c6aedd1bc77bfd3f68877dd",
+      "C1704_FMM:p130:2": "33a5c47461cff983853d78ad348d4da2eb49dbda9c7e27e240c2a1558d98d344",
+      "C3408_TACM:p120:0": "057d1070a6e4aa1537ba7782c076a6f5c750326eeace61d853bcc4419bac6af9"
+    }
+  },
+  "vector_head4_run_a": {
+    "P1_en_short": [
+      -0.0037920033,
+      0.009549023,
+      -0.05195193,
+      -0.0064396113
+    ],
+    "P2_en_technical": [
+      -0.03556434,
+      0.019831466,
+      -0.01341528,
+      -0.021411536
+    ],
+    "P3_zh": [
+      -0.03586812,
+      0.0087853735,
+      -0.039816007,
+      -0.04497191
+    ],
+    "P4_tl": [
+      -0.016328523,
+      0.017024118,
+      -0.030918356,
+      -0.019641992
+    ],
+    "P5_punct_numeric_unit": [
+      -0.02893506,
+      0.010552057,
+      -0.04589029,
+      0.004707097
+    ],
+    "C0_CRM:p1:0": [
+      -0.04252937,
+      -0.051872756,
+      -0.040707085,
+      -0.026324067
+    ],
+    "C1704_FMM:p130:2": [
+      0.025195217,
+      -0.027980587,
+      -0.035692144,
+      0.026929298
+    ],
+    "C3408_TACM:p120:0": [
+      -0.03274357,
+      -2.9690915e-05,
+      -0.030094944,
+      0.013342704
+    ]
+  }
+}

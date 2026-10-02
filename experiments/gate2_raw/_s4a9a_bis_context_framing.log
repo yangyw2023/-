@@ -1,0 +1,28 @@
+model    = phi4-mini:latest
+question = FL06 (en)
+
+A/C 形状（无 context 框架）  = 201 tok
+B/D 形状（含 context 框架）  = 206 tok
+framing overhead F           = 5 tok
+SEP（多一个换行的增量）      = 0 tok
+
+>>> provisional PROMPT_OVERHEAD_RESERVE_TOKENS = 206
+>>> ⚠️ 不含 citation header 与 chunk text —— 那两项在 est_prompt_tokens() 里
+
+>>> ⚠️ SEP 仅作【诊断观察】，不据此修改任何常量。
+>>>    它量的是'无 chunk 上下文里多一个换行'的增量，
+>>>    与真实块间 separator 不是同一个量（tokenizer 会合并连续换行；
+>>>    真实 separator 两边有 citation header 与 chunk 文本，分词不同）。
+
+>>> B     = int((950 - 206) * 0.86) = 639
+>>> worst = 639 * 1.15 + 206 = 940.8
+>>> slack = 950 - 940.8 = 9.2 tok
+>>> provisional k_est = 639 // 306 = 2
+
+>>> 判定（不设阈值，写成条件式）：
+>>>   k_est = 2 成立，当且仅当真实块间 separator 成本
+>>>   ≤ 9.2 tok（k=2 时只有 1 个 separator）。
+>>>   该值由 S5 的真实 rendered chunk 测定，本轮不判失败。
+
+>>> ⚠️ k_est 按 306 tok/chunk 估算，而 CHARS_PER_TOKEN_EST=4 尚未校准。
+>>>    真实 k 仍须经 9c（provisional）与 S5 真实 chunk（权威）确认。

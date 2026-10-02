@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "<stdin>", line 14, in <module>
+  File "<stdin>", line 12, in count
+KeyError: 'prompt_eval_count'

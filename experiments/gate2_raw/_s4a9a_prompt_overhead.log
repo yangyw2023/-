@@ -1,0 +1,17 @@
+模型: phi4-mini:latest
+仅系统提示词 + chat template = 137 tok
+
+系统提示词 + 问题：
+  最小  145 tok  (TR01 en)
+  中位  155 tok
+  最大  201 tok  (FL06 en)   ← 按这个定预算
+
+最长的 5 道：
+   174 tok  CD02 (en)
+   182 tok  CD01 (en)
+   184 tok  FL10 (en)
+   186 tok  ML03 (hi)
+   201 tok  FL06 (en)
+
+>>> PROMPT_OVERHEAD_RESERVE_TOKENS = 201
+>>> 对比当前估算值 200，差 +1 tok

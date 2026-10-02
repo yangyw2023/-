@@ -1,0 +1,91 @@
+======================================================================
+MODEL: phi4-mini:latest
+======================================================================
+
+--- ML01(zh) ---
+Q: 晋升为船长前，大副必须与即将离任的船长并行航行至少多少天？
+A: 晋升为船长之前，大副必须与即将离任的船长并行航行的具体天数可能因不同的国家或海事机构的规定而异。一般来说，这种要求是为了确保大副能够在实际操作中学习船长的职责和责任，并与经验丰富的船长一起工作，以获得宝贵的经验。然而，没有一个统一的标准，规定大副必须与船长并行航行的确切天数。
+
+在某些国家或海事机构中，可能有特定的法规或规定，规定
+
+--- ML02(tl) ---
+Q: Gaano kadalas dapat isagawa ang drug test sa mga tripulante — sa mga tanker at sa mga non-tanker?
+A: Ang pag-regulate ng drug test sa mga tripulante, kabilang ang mga tanker at mga non-tanker, ay mahalaga upang maiwasan ang mga panganib at masarap na pag-work sa isang transportasyon na sistema. Ang proseso at kadalasang ginagamit sa mga drug test ay sumusunod sa mga sumusunod na hakbang:
+
+1. **Pagpapalitan ng drug test**: Ang mga tripulante, kabilang ang mga tanker at mga non-tanker, ay kadalasang patupad ng regular na drug test upang maiwasan ang tamang pag-work. Ang
+
+--- ML03(hi) ---
+Q: आपातकाल के बारे में जानने के बाद मास्टर को DPA को कितने समय के भीतर सूचित करना चाहिए?
+A: आपातकाल (द पवित्र दिवस) के दौरान, जैन धर्म में, विशेष रूप से बाद मास्टर (बाद मांस) को त्यागना या खींचना, जिसे DPA (द पवित्र दिवस) के लिए कहा जाता है, एक महत्वपूर्ण धार्मिक कर्तव्य है। जैन धर्म में, बाद मास्टर को खींचना या त्यागना मान्यता है कि यह एक पवित्र कर्तव्य है, और इसे किसी भी समय नहीं किया जा सकता, विशेष रूप से आपातकाल के दौरान।
+
+आपात
+
+--- EXTRA-tl ---
+Q: Ano ang pinakamababang bilang ng araw para sa turnover ng Kapitan?
+A: Ang pinakamababang bilang ng araw para sa turnover ng Kapitan sa Philippine Navy ay 365. Ang Kapitan, na isa sa pinakamataas na rango sa Armed Forces of the Philippines, ay maaaring mag-turnover ng isang bagong kaptein every year, na karaniwang nagtatag ng isang new kaptein every 365 days. Gayunpaman, ang turnover rate ay maaaring mag-iba base sa iba't ibang mga faktor tulad ng personal choice, karera, at iba pang karapatan. Ang turnover rate para sa mga military ranks na mas mataas kaysa Kapita
+
+--- EXTRA-hi ---
+Q: जहाज पर आपातकालीन अभ्यास कितनी बार किया जाना चाहिए?
+A: यह एक लोकप्रिय हिंदी कहानियाँ या लोककथाओं से लिया गया कथानक है, जहां एक जादूगर या एक साधु व्यक्ति को एक जादू या मंत्र का उपयोग करके एक जहाज को आपातकालीन स्थिति में चलाने के लिए कहा जाता है। हालांकि, यह एक काल्पनिक या सांस्कृतिक संदर्भ में है, क्योंकि जादू या मंत्रों का उपयोग वास्तविक दुनिया में जहाजों को चलाने के लिए कोई प्रमाणित विधि नहीं है।
+
+जहाजों को चलाने के लिए, आमतौर पर वैज्ञानिक और तकनीकी
+======================================================================
+MODEL: qwen3:4b
+======================================================================
+
+--- ML01(zh) ---
+Q: 晋升为船长前，大副必须与即将离任的船长并行航行至少多少天？
+A: 嗯，用户问的是晋升为船长前，大副必须和即将离任的船长并行航行至少多少天。这个问题看起来有点专业，可能用户是在准备航海相关的考试，或者对船舶管理流程感兴趣。首先，我需要回忆一下国际海事组织（IMO）的规定，或者各国海事局的具体要求，因为不同国家可能有不同的规定。
+
+首先，大副（Chief Mate）是船舶的高级船员，负责日常的航行和管理。当大副晋升为船长（Captain）时，通常需要有一定的经验积累，尤其是实际
+
+--- ML02(tl) ---
+Q: Gaano kadalas dapat isagawa ang drug test sa mga tripulante — sa mga tanker at sa mga non-tanker?
+A: Okay, so I need to figure out how often drug tests are conducted for crew members on tankers and non-tankers. Hmm, first I should clarify what exactly the question is asking. The user is asking about the frequency of drug tests for crew members on tankers versus non-tankers. Wait, "non-tanker" here probably refers to other types of ships, like cargo ships, passenger ships, etc., that aren't tankers. So the question is about how often drug tests are done for crew on tankers versus non-tankers.
+
+I
+
+--- ML03(hi) ---
+Q: आपातकाल के बारे में जानने के बाद मास्टर को DPA को कितने समय के भीतर सूचित करना चाहिए?
+A: Okay, so I need to figure out how quickly a Master should inform the DPA (which I think stands for Disaster Preparedness Authority or something similar) after knowing about an emergency situation. Wait, the question is in Hindi: "आपातकाल के बारे में जानने के
+
+--- EXTRA-tl ---
+Q: Ano ang pinakamababang bilang ng araw para sa turnover ng Kapitan?
+A: Okay, so I need to figure out the lowest number of days for a captain's turnover. Hmm, first I should make sure I understand what "turnover" means here. In business or military terms, turnover usually refers to the rate at which people leave or are replaced. But the question is in Tagalog, so maybe "turnover" here is a specific term in that context.
+
+Wait, the user wrote "Ano ang pinakamababang bilang ng araw para sa turnover ng Kapitan?" which translates to "What is the lowest number of days fo
+
+--- EXTRA-hi ---
+Q: जहाज पर आपातकालीन अभ्यास कितनी बार किया जाना चाहिए?
+A: Okay, so I need to figure out how many times an emergency drill should be conducted on a ship. Let me think. I remember that in maritime safety, there are specific regulations about emergency drills. Maybe it's related to the International Maritime Organization (IMO) or some national maritime authority.
+
+First, I should recall the standard requirements. I think the SOLAS (Safety of Life at Sea) conventions have rules about this. SOLAS is a key international treaty for maritime safety. Let me try
+======================================================================
+MODEL: llama3.2:3b
+======================================================================
+
+--- ML01(zh) ---
+Q: 晋升为船长前，大副必须与即将离任的船长并行航行至少多少天？
+A: 我无法提供有关船长晋升的具体时间要求的信息。
+
+--- ML02(tl) ---
+Q: Gaano kadalas dapat isagawa ang drug test sa mga tripulante — sa mga tanker at sa mga non-tanker?
+A: Ang kadalasang isagawang drug test sa mga tripulante ay nagpapatuloy sa mga tanker at sa mga non-tanker, ngunit ang tasa ng kawalan ng pagkakataon ay nagbabago.
+
+Sa mga tanker, ang kawalan ng pagkakataon ng drug test ay maaaring 1-2% sa loob ng isang taon, depende sa mga kaganapan at mga kailangan ng tripulasyon. Ngunit, ang kawalan ng pagkakataon ay maa
+
+--- ML03(hi) ---
+Q: आपातकाल के बारे में जानने के बाद मास्टर को DPA को कितने समय के भीतर सूचित करना चाहिए?
+A: आपातकाल के बारे में जानने के बाद, मास्टर को DPA (डिप्टी प्रेसिडेंट ऑफ़ अमेरिका) को सूचित करने के लिए एक निश्चित समय सीमा का पालन करना चाहिए।
+
+आमतौर पर, आपातकाल की स्थिति में, मास्टर को DPA को सूचित करने के लिए 24 घंटे का समय दिया ज
+
+--- EXTRA-tl ---
+Q: Ano ang pinakamababang bilang ng araw para sa turnover ng Kapitan?
+A: Ang pinakamababang bilang ng araw para sa turnover ng Kapitan ay 1 araw.
+
+--- EXTRA-hi ---
+Q: जहाज पर आपातकालीन अभ्यास कितनी बार किया जाना चाहिए?
+A: जहाज पर आपातकालीन अभ्यास की आवश्यकता होती है ताकि जहाज के स्वास्थ्य और सुरक्षा की जांच की जा सके और किसी भी आपात स्थिति के लिए तैयारी की जा सके। यहाँ कुछ सुझाव दिए गए हैं कि जहाज पर आपातकालीन अभ्यास कितनी बार किया जाना चाहिए:
+
+1. **नियम

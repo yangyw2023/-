@@ -1,0 +1,33 @@
+{
+  "corpus_sha256": "c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb",
+  "rows": 3409,
+  "dimension": 1024,
+  "dtype": "float64",
+  "row_order": "row i = canonical corpus/chunks.jsonl physical line i (0-based)",
+  "chunk_ids_sha256": "c3e44ac3439e564674bef4094e2eb1f4078def613f057eb99bdda435b4e00001",
+  "model_tag": "bge-m3:latest",
+  "model_blob_digest": "sha256:daec91ffb5dd0c27411bd71f29932917c49cf529a641d0168496c3a501e3062c",
+  "manifest_sha256": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab",
+  "endpoint": "POST /api/embed",
+  "truncate": false,
+  "execution_path": "MAC_DEFAULT_METAL",
+  "options": "none_no_num_gpu_override",
+  "query_prefix": "",
+  "document_prefix": "",
+  "embed_batch_size": 32,
+  "runtime_observed": {
+    "ollama_server": "0.34.0",
+    "ollama_client": "0.23.1",
+    "loaded_models": [
+      {
+        "name": "bge-m3:latest",
+        "size": 673049476,
+        "size_vram": 673049476
+      }
+    ]
+  },
+  "embedding_protocol_digest": "38acb0b4260a516dffc32680067d5cb55c6c56d09a4d4045ebcda2d289b54af0",
+  "vector_py_sha256": "0e6da0b29e36f8e9854680ec1be2d5778f67ff3ca3c512ccbd3053ec7b09335b",
+  "npy_sha256": "70c34277a2be8ce54b78474a81eeb0ced9276e0c5c3312b43446a4126cf54459",
+  "build_seconds": 62.89
+}

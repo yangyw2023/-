@@ -1,0 +1,23 @@
+tested_at=2026-09-08T15:47:57+08:00
+date_utc=2026-09-08T07:47:57Z
+code_commit=a1973efe010ee1ef036a325fce6148b6b22d4aa0
+--- brew ---
+llama.cpp 0.4.0
+ggml 0.20.0 0.23.0
+note=multiple ggml Cellar versions present; runtime logs loaded 0.23.0
+--- llama-cli ---
+version: 0.4.0 (build 10809, commit 5266f24da)
+built with AppleClang 17.0.0.17000604 for Darwin arm64
+--- ollama ---
+ollama version is 0.33.3
+--- OS ---
+ProductName:		macOS
+ProductVersion:		15.6
+BuildVersion:		24G84
+arm64
+--- device scope ---
+bench_args=-ngl 0 -t 8
+observed_backend_banner=BLAS,MTL
+cpu_only_verified=false
+note=Metal backend was initialized; loading a backend library is not evidence that
+     matmul was offloaded. Actual CPU-only scope requires a --device none control run.

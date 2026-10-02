@@ -1,431 +1,441 @@
 #!/usr/bin/env python3
-"""Backfill ``gold_chunk_ids`` on the evaluation set by resolving each citation
-onto concrete corpus chunk ids.
+"""把评测集 citations 解析到冻结语料的 chunk 上，产出 GoldChunkMap（contracts v0.3.1）。
 
-One-off data backfill: reads a frozen evaluation set whose ``gold_chunk_ids`` are
-all empty, resolves the citations of every ``expected == "answer"`` question
-against a parsed corpus, and writes a resolved copy plus a per-citation audit
-report. Nothing is written back over the inputs.
+职责边界:
+  - 只读评测集与语料；【从不】修改评测集（不回写 gold_chunk_ids，不输出"resolved testset"）。
+  - 单条 citation 的解析语义完全来自 core.contracts 的 MatchLevel 定义：
+    片段来自 split_quote_fragments()（含短片段），只看 citation 所在页，
+    formal gold = 唯一最小基数 full evidence cover；最小 cover 不唯一 → AMBIGUOUS，不做任何 tie-break。
+  - GoldChunkMap 的构建身份只从 ingest.builder_identity 取得，并以该模块本身作为 builder
+    传给 validate_gold_chunk_map()；本脚本不手写任何身份值。
 
-Matching contract
------------------
-A citation is resolved by trying four strategies in the order below. The first
-strategy that yields at least one chunk wins; its label is recorded as the
-citation's ``match_level`` and no later strategy is tried. Comparison is done on
-whitespace-normalised text on BOTH sides (runs of whitespace folded to a single
-space, ends stripped); no other normalisation is applied, so punctuation, case
-and typographic characters must match the corpus byte-for-byte.
+用法:
+    python3 scripts/resolve_gold_chunks.py --chunks corpus/chunks.jsonl \\
+        --testset eval/testset_v5_3.jsonl --corpus-sha <8 位或 64 位小写十六进制> \\
+        --out-dir eval/gold_chunk_map/
 
-    L1  same ``doc_id``, same ``pdf_page``, chunk text contains the whole quote.
-    L2  same ``doc_id``, ``pdf_page`` within +/-PAGE_WINDOW, chunk text contains
-        the whole quote. Rationale: chunking may spill a page into a neighbour.
-    L3  same ``doc_id``, ``pdf_page`` within +/-PAGE_WINDOW, chunk text contains
-        the quote's first FUZZY_PREFIX_CHARS characters.
-    L4  same ``doc_id``, same ``pdf_page``, every chunk on that page. This is a
-        fallback, not a match: it is flagged ``needs_review``.
-    FAIL  none of the above produced a chunk, i.e. the corpus holds no chunk at
-        that ``(doc_id, pdf_page)`` at all. A FAIL is a signal, not a nuisance:
-        it means either the quote or the page in the evaluation set is wrong, or
-        the parser dropped that page. It is never silently swallowed.
+输出（均在 --out-dir 下，文件名由 GoldChunkMap.filename() / report_filename() 生成）:
+  - <map>.report.csv   每条 answer citation 一行，【总是】写出
+  - <map>.json         只有全部 answer citation 都解析为 L1/L2 且通过 validate_gold_chunk_map() 时才写出
 
-Known limitation, deliberately not worked around: quotes in which fragments are
-joined by an ellipsis ("A ... B") are matched literally, so L1/L2 cannot hit them
-and their first FUZZY_PREFIX_CHARS characters usually still span the ellipsis, so
-L3 cannot either. Such citations fall through to L4 or FAIL by design.
-
-Failure policy
---------------
-Errors are raised, never absorbed. Missing files, malformed JSON, missing or
-ill-typed fields, duplicate chunk ids and empty quotes all abort the run. An
-unresolvable citation is NOT an error: it is recorded as FAIL and reported.
+退出码:
+  0                       映射被接受并写出
+  EXIT_MAP_NOT_ACCEPTED   存在未解析的 answer citation（fail-closed）：只写 report，不写映射
+  其他非零                输入或契约错误（抛异常，不吞）
 """
+
+from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import itertools
 import json
+import os
 import re
 import sys
-from typing import Dict, Iterator, List, NamedTuple, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Iterator, Sequence
 
-# --- Matching parameters -----------------------------------------------------
-# Half-width of the page window used by L2/L3, in pages. 1 == look at p-1, p, p+1.
-PAGE_WINDOW = 1
-# Number of leading characters of the normalised quote used as the L3 probe.
-FUZZY_PREFIX_CHARS = 40
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# --- Report formatting -------------------------------------------------------
-# Number of leading characters of the normalised quote written to the report.
-QUOTE_HEAD_CHARS = 60
-# Separator packing several chunk ids into one CSV cell (comma is the delimiter).
-CHUNK_ID_SEPARATOR = ";"
-REPORT_COLUMNS = (
-    "question_id",
-    "doc_id",
-    "section",
-    "pdf_page",
-    "quote_head",
-    "match_level",
-    "matched_chunk_ids",
-    "n_matches",
-    "needs_review",
+from core import contracts  # noqa: E402
+from core.contracts import (  # noqa: E402
+    Chunk,
+    Citation,
+    ContractViolation,
+    EvalItem,
+    GoldChunkMap,
+    is_sole_match_eligible,
+    normalize_text,
+    serialize_gold_chunk_map,
+    split_quote_fragments,
+    testset_version_from_path,
+    validate_eval_item,
+    validate_gold_chunk_map,
 )
+import ingest.builder_identity as builder_identity  # noqa: E402
 
-# --- Vocabulary --------------------------------------------------------------
-EXPECTED_ANSWER = "answer"
-LEVEL_L1 = "L1"
-LEVEL_L2 = "L2"
-LEVEL_L3 = "L3"
-LEVEL_L4 = "L4"
-LEVEL_FAIL = "FAIL"
-# Order used for the report and the terminal summary.
-MATCH_LEVELS = (LEVEL_L1, LEVEL_L2, LEVEL_L3, LEVEL_L4, LEVEL_FAIL)
-# The single level that means "a human must look at this".
-NEEDS_REVIEW_LEVELS = frozenset({LEVEL_L4})
-
-REQUIRED_CHUNK_FIELDS = ("id", "text", "doc_id", "pdf_page")
-REQUIRED_QUESTION_FIELDS = ("id", "expected", "citations", "gold_chunk_ids")
-REQUIRED_CITATION_FIELDS = ("doc_id", "section", "pdf_page", "quote")
-
-_WHITESPACE_RUN = re.compile(r"\s+")
+# 映射未被接受（存在未解析的 answer citation）时的退出码。
+EXIT_MAP_NOT_ACCEPTED: int = 3
+# 完整 SHA-256 的十六进制长度（由算法导出，不是手写的 64）。
+SHA256_HEX_CHARS: int = hashlib.sha256().digest_size * 2
+_HEX_RE = re.compile(r"^[0-9a-f]+$")
+# report.csv 里多个 chunk id 的连接符（契约规定）。
+CHUNK_ID_SEPARATOR: str = ";"
+# report.csv 布尔列的取值。
+CSV_TRUE, CSV_FALSE = "true", "false"
+HASH_READ_BLOCK_BYTES: int = 1 << 20
 
 
-class GoldChunkResolutionError(Exception):
-    """Raised when an input violates the contract this script relies on.
+class ResolverInputError(Exception):
+    """输入文件违反本脚本依赖的格式（坏 JSON、字段不符、重复 id、--corpus-sha 不匹配等）。
 
-    Signals bad data, not a bad match: an unresolvable citation yields a FAIL row
-    instead of this exception.
+    这表示"数据坏了"，不是"没解析出来"：未解析的 citation 进 report，不抛本异常。
     """
 
 
-class IndexedChunk(NamedTuple):
-    """A corpus chunk reduced to what matching needs.
+# ==============================================================================
+# 数据
+# ==============================================================================
 
-    ``norm_text`` is the chunk's text after whitespace normalisation; it is
-    precomputed so the same chunk is not renormalised once per citation.
+@dataclass(frozen=True)
+class FragmentMatch:
+    """一个引文片段在 citation 页上的命中证据。candidate_chunk_ids 按 corpus 顺序。"""
+    index: int
+    text: str
+    sole_match_eligible: bool
+    candidate_chunk_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class QuoteResolution:
+    """单条 quote 在其所在页上的解析结果。
+
+    formal_chunk_ids 只在 level ∈ FORMAL_MATCH_LEVELS 时非空，按 corpus 顺序。
+    candidate_chunk_ids = 有片段命中、但不在 formal cover 中的 chunk，按 corpus 顺序。
     """
+    level: str
+    formal_chunk_ids: tuple[str, ...]
+    candidate_chunk_ids: tuple[str, ...]
+    fragments: tuple[FragmentMatch, ...]
 
-    chunk_id: str
-    norm_text: str
 
-
-class CitationResolution(NamedTuple):
-    """The outcome of resolving one citation.
-
-    ``match_level`` is one of MATCH_LEVELS. ``chunk_ids`` is empty if and only if
-    ``match_level`` is FAIL, and is ordered as the chunks appear in the corpus
-    file. ``needs_review`` is True exactly for the levels in NEEDS_REVIEW_LEVELS.
-    """
-
+@dataclass(frozen=True)
+class CitationResolution:
+    """一条 answer citation 的完整解析记录（report.csv 的一行）。citation_index 为 0-based。"""
     question_id: str
-    doc_id: str
+    citation_index: int
+    citation: Citation
+    section_exact_match: bool
+    resolution: QuoteResolution
+
+
+@dataclass(frozen=True)
+class PageChunk:
+    """语料中某页的一个 chunk（已按 corpus 顺序排好）。"""
+    chunk_id: str
+    text: str
     section: str
-    pdf_page: int
-    norm_quote: str
-    match_level: str
-    chunk_ids: Tuple[str, ...]
-
-    @property
-    def needs_review(self) -> bool:
-        return self.match_level in NEEDS_REVIEW_LEVELS
 
 
-# Chunks grouped by their locating pair, preserving corpus order within a page.
-PageIndex = Dict[Tuple[str, int], List[IndexedChunk]]
+# ==============================================================================
+# 核心解析（纯函数）
+# ==============================================================================
 
+def resolve_quote(quote: str, page_chunks: Sequence[tuple[str, str]]) -> QuoteResolution:
+    """按 contracts.MatchLevel 的定义解析一条 quote。
 
-def normalize_whitespace(text: str) -> str:
-    """Fold every run of whitespace to a single space and strip the ends.
+    输入:
+      - quote: citation 原文引语；片段一律经 split_quote_fragments()（含短片段）。
+      - page_chunks: citation 所在页 (doc_id, pdf_page) 的全部 chunk，形如 (chunk_id, text)，
+        【按 corpus 顺序】。空序列表示该页在语料中没有 chunk。本函数不看其他页。
+    返回 QuoteResolution。只在 quote 为空等契约违反时抛 ContractViolation（来自 split_quote_fragments）。
 
-    The only normalisation applied before comparing quotes to chunk text; callers
-    must not assume case, punctuation or typographic characters are touched.
+    语义（逐条对应契约）:
+      FAIL       page_chunks 为空
+      L1 / L2    存在 full evidence cover，且最小基数 cover 唯一；|cover| = 1 为 L1，≥ 2 为 L2
+      AMBIGUOUS  存在 full cover，但最小基数 cover 不唯一（不做任何 tie-break）
+      L3         无 full cover，且至少一个 sole-match eligible 片段有 candidate
+      L4         页存在，无 full cover，且没有 eligible 片段命中
+    corpus 顺序只用于枚举与输出顺序；cover 是否唯一只取决于集合本身，与顺序无关。
     """
-    return _WHITESPACE_RUN.sub(" ", text).strip()
+    fragments = split_quote_fragments(quote)
+    order = [chunk_id for chunk_id, _ in page_chunks]
+    if len(set(order)) != len(order):
+        raise ResolverInputError(f"同一页出现重复 chunk id: {order}")
+    normalized = {chunk_id: normalize_text(text) for chunk_id, text in page_chunks}
+    candidates = [tuple(cid for cid in order if fragment in normalized[cid]) for fragment in fragments]
+    matches = tuple(
+        FragmentMatch(index=i, text=f, sole_match_eligible=is_sole_match_eligible(f), candidate_chunk_ids=c)
+        for i, (f, c) in enumerate(zip(fragments, candidates))
+    )
+    matched_any = [cid for cid in order if any(cid in c for c in candidates)]
+
+    if not page_chunks:
+        return QuoteResolution("FAIL", (), (), matches)
+    if all(candidates):
+        covers = _minimum_covers(matched_any, candidates)
+        if len(covers) == 1:
+            formal = tuple(cid for cid in order if cid in covers[0])
+            level = "L1" if len(formal) == 1 else "L2"
+            return QuoteResolution(level, formal, tuple(cid for cid in matched_any if cid not in formal), matches)
+        return QuoteResolution("AMBIGUOUS", (), tuple(matched_any), matches)
+    if any(m.candidate_chunk_ids and m.sole_match_eligible for m in matches):
+        return QuoteResolution("L3", (), tuple(matched_any), matches)
+    return QuoteResolution("L4", (), tuple(matched_any), matches)
 
 
-def iter_jsonl(path: str) -> Iterator[Tuple[int, dict]]:
-    """Yield ``(line_number, object)`` for each non-blank line of a JSONL file.
+def _minimum_covers(universe: Sequence[str], candidates: Sequence[tuple[str, ...]]) -> list[frozenset[str]]:
+    """返回全部最小基数 full cover（至多两个：两个就足以判定"不唯一"）。
 
-    Line numbers are 1-based so they can be quoted back to a human editing the
-    file. Blank lines are skipped as insignificant formatting.
-
-    Raises:
-        OSError: the file cannot be opened or read.
-        json.JSONDecodeError: a line is not valid JSON.
-        GoldChunkResolutionError: a line is valid JSON but not a JSON object.
+    输入假设: 每个 candidates[i] 非空且 ⊆ universe。按基数从小到大枚举 universe 的组合，
+    第一个出现 cover 的基数即最小基数。结果只取决于集合，不取决于枚举顺序。
     """
-    with open(path, "r", encoding="utf-8") as handle:
+    needed = [frozenset(c) for c in candidates]
+    for size in range(1, len(universe) + 1):
+        found: list[frozenset[str]] = []
+        for combo in itertools.combinations(universe, size):
+            chosen = frozenset(combo)
+            if all(chosen & n for n in needed):
+                found.append(chosen)
+                if len(found) > 1:
+                    return found
+        if found:
+            return found
+    raise ContractViolation("全部片段都有 candidate 时必然存在 full cover；不应到达此处")
+
+
+# ==============================================================================
+# 输入
+# ==============================================================================
+
+def file_sha256(path: str) -> str:
+    """文件字节的完整 SHA-256（小写十六进制）。文件不可读抛 OSError。"""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(HASH_READ_BLOCK_BYTES), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _iter_jsonl(path: str) -> Iterator[tuple[int, dict]]:
+    """逐行产出 (1-based 行号, JSON 对象)。
+
+    空行（含仅空白的行）视为无意义格式而跳过，与仓库其他 JSONL 读取方
+    （OcrArtifactStore、审计脚本、旧版 resolver）一致；行号仍按物理行计。
+    非对象行、坏 JSON 一律抛 ResolverInputError。
+    """
+    with open(path, encoding="utf-8") as handle:
         for line_no, line in enumerate(handle, start=1):
             if not line.strip():
                 continue
-            record = json.loads(line)
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ResolverInputError(f"{path}:{line_no}: 非法 JSON: {exc}") from exc
             if not isinstance(record, dict):
-                raise GoldChunkResolutionError(
-                    f"{path}:{line_no}: expected a JSON object, got {type(record).__name__}"
-                )
+                raise ResolverInputError(f"{path}:{line_no}: 期望 JSON 对象，得到 {type(record).__name__}")
             yield line_no, record
 
 
-def _require_fields(record: dict, fields: Sequence[str], where: str) -> None:
-    """Assert that every name in ``fields`` is a key of ``record``.
+def load_corpus(path: str) -> tuple[list[str], dict[tuple[str, int], list[PageChunk]]]:
+    """读语料。返回 (全部 chunk id 按文件行序, {(doc_id, pdf_page): 该页 chunk 按行序})。
 
-    Raises:
-        GoldChunkResolutionError: naming ``where`` and every missing key.
+    每行必须恰好构成一个 contracts.Chunk；chunk id 全局唯一；pdf_page 为 ≥1 的 int。违反抛 ResolverInputError。
     """
-    missing = [name for name in fields if name not in record]
-    if missing:
-        raise GoldChunkResolutionError(f"{where}: missing required field(s): {', '.join(missing)}")
+    ids: list[str] = []
+    seen: set[str] = set()
+    pages: dict[tuple[str, int], list[PageChunk]] = {}
+    for line_no, record in _iter_jsonl(path):
+        try:
+            chunk = Chunk(**record)
+        except TypeError as exc:
+            raise ResolverInputError(f"{path}:{line_no}: 不符合 Chunk schema: {exc}") from exc
+        if chunk.id in seen:
+            raise ResolverInputError(f"{path}:{line_no}: chunk id 重复: {chunk.id!r}")
+        page = chunk.pdf_page
+        if not isinstance(page, int) or isinstance(page, bool) or page < 1:
+            raise ResolverInputError(f"{path}:{line_no}: pdf_page 必须是 ≥1 的 int，得到 {page!r}")
+        seen.add(chunk.id)
+        ids.append(chunk.id)
+        pages.setdefault((chunk.doc_id, page), []).append(PageChunk(chunk.id, chunk.text, chunk.section))
+    return ids, pages
 
 
-def load_page_index(chunks_path: str) -> Tuple[PageIndex, int]:
-    """Read the corpus and group its chunks by ``(doc_id, pdf_page)``.
+def load_testset(path: str) -> list[EvalItem]:
+    """读评测集，逐条构造 EvalItem 并调用 validate_eval_item()。按文件行序返回。
 
-    Returns the index and the number of chunks loaded. Chunk ids are required to
-    be unique corpus-wide, since a duplicate would make a resolved
-    ``gold_chunk_ids`` ambiguous.
-
-    Raises:
-        OSError, json.JSONDecodeError: see :func:`iter_jsonl`.
-        GoldChunkResolutionError: a chunk lacks a required field, its
-            ``pdf_page`` is not an int, or its ``id`` is not unique.
+    字段多余/缺失（包括遗留的 gold_chunk_ids）→ ResolverInputError；契约违反 → ContractViolation。
+    question id 重复 → ResolverInputError。
     """
-    index: PageIndex = {}
-    seen_ids: Dict[str, int] = {}
-    for line_no, chunk in iter_jsonl(chunks_path):
-        where = f"{chunks_path}:{line_no}"
-        _require_fields(chunk, REQUIRED_CHUNK_FIELDS, where)
-        chunk_id = str(chunk["id"])
-        if chunk_id in seen_ids:
-            raise GoldChunkResolutionError(
-                f"{where}: duplicate chunk id {chunk_id!r}, first seen on line {seen_ids[chunk_id]}"
-            )
-        seen_ids[chunk_id] = line_no
-        pdf_page = chunk["pdf_page"]
-        # bool is an int subclass; a boolean page is a contract violation, not a page.
-        if not isinstance(pdf_page, int) or isinstance(pdf_page, bool):
-            raise GoldChunkResolutionError(
-                f"{where}: pdf_page must be an int, got {type(pdf_page).__name__}"
-            )
-        key = (str(chunk["doc_id"]), pdf_page)
-        index.setdefault(key, []).append(
-            IndexedChunk(chunk_id=chunk_id, norm_text=normalize_whitespace(str(chunk["text"])))
+    items: list[EvalItem] = []
+    for line_no, record in _iter_jsonl(path):
+        try:
+            fields = dict(record)
+            fields["citations"] = tuple(Citation(**c) for c in record.get("citations", ()))
+            item = EvalItem(**fields)
+        except TypeError as exc:
+            raise ResolverInputError(f"{path}:{line_no}: 不符合 EvalItem/Citation schema: {exc}") from exc
+        validate_eval_item(item)
+        items.append(item)
+    ids = [item.id for item in items]
+    if len(set(ids)) != len(ids):
+        raise ResolverInputError(f"{path}: question id 重复")
+    return items
+
+
+def check_corpus_sha_assertion(asserted: str, computed: str) -> None:
+    """--corpus-sha 只是期望值断言: 必须是 CORPUS_SHA_PREFIX_CHARS 位或完整长度的小写十六进制，
+    且是 computed 的前缀。否则抛 ResolverInputError。映射中永远只写 computed。"""
+    if len(asserted) not in (contracts.CORPUS_SHA_PREFIX_CHARS, SHA256_HEX_CHARS) or not _HEX_RE.match(asserted):
+        raise ResolverInputError(
+            f"--corpus-sha 必须是 {contracts.CORPUS_SHA_PREFIX_CHARS} 位或 {SHA256_HEX_CHARS} 位小写十六进制: {asserted!r}"
         )
-    return index, len(seen_ids)
+    if not computed.startswith(asserted):
+        raise ResolverInputError(f"--corpus-sha {asserted!r} 与实际语料 sha256 {computed} 不符")
 
 
-def load_questions(testset_path: str) -> List[dict]:
-    """Read the evaluation set, preserving each record's fields and their order.
+# ==============================================================================
+# 解析整个评测集
+# ==============================================================================
 
-    Raises:
-        OSError, json.JSONDecodeError: see :func:`iter_jsonl`.
-        GoldChunkResolutionError: a question or one of its citations lacks a
-            required field, ``citations`` is not a list, or a citation's
-            ``pdf_page`` is not an int / its ``quote`` is blank. A blank quote is
-            rejected because it would match every chunk on the page.
+def resolve_all(items: Sequence[EvalItem],
+                pages: dict[tuple[str, int], list[PageChunk]]) -> list[CitationResolution]:
+    """解析每道 expected=="answer" 的题的每条 citation。按评测集顺序、citation_index 升序返回。
+
+    拒答题不产生任何行（validate_eval_item 已保证其 citations 为空）。
     """
-    questions: List[dict] = []
-    for line_no, question in iter_jsonl(testset_path):
-        where = f"{testset_path}:{line_no}"
-        _require_fields(question, REQUIRED_QUESTION_FIELDS, where)
-        if not isinstance(question["citations"], list):
-            raise GoldChunkResolutionError(
-                f"{where}: citations must be a list, got {type(question['citations']).__name__}"
-            )
-        for position, citation in enumerate(question["citations"]):
-            cite_where = f"{where}: question {question['id']!r} citation #{position}"
-            if not isinstance(citation, dict):
-                raise GoldChunkResolutionError(
-                    f"{cite_where}: expected a JSON object, got {type(citation).__name__}"
-                )
-            _require_fields(citation, REQUIRED_CITATION_FIELDS, cite_where)
-            pdf_page = citation["pdf_page"]
-            if not isinstance(pdf_page, int) or isinstance(pdf_page, bool):
-                raise GoldChunkResolutionError(
-                    f"{cite_where}: pdf_page must be an int, got {type(pdf_page).__name__}"
-                )
-            if not normalize_whitespace(str(citation["quote"])):
-                raise GoldChunkResolutionError(f"{cite_where}: quote is empty")
-        questions.append(question)
-    return questions
+    out: list[CitationResolution] = []
+    for item in items:
+        if item.expected != "answer":
+            continue
+        for index, citation in enumerate(item.citations):
+            page = pages.get((citation.doc_id, citation.pdf_page), [])
+            resolution = resolve_quote(citation.quote, [(c.chunk_id, c.text) for c in page])
+            out.append(CitationResolution(
+                question_id=item.id, citation_index=index, citation=citation,
+                section_exact_match=any(c.section == citation.section for c in page),
+                resolution=resolution,
+            ))
+    return out
 
 
-def _chunks_on_pages(index: PageIndex, doc_id: str, pages: Sequence[int]) -> List[IndexedChunk]:
-    """Collect the chunks of ``doc_id`` on ``pages``, in corpus order per page.
+def build_mapping(items: Sequence[EvalItem], resolutions: Sequence[CitationResolution],
+                  corpus_ids: Sequence[str]) -> dict[str, list[str]]:
+    """mapping[qid] = 该题全部 citation formal cover 的并集，按 corpus 顺序；键按评测集顺序。
 
-    Pages absent from the corpus contribute nothing; an empty result means the
-    document has no chunk on any of those pages.
+    输入假设: 全部 resolution 都是 L1/L2（调用方先做 fail-closed 判断）。
     """
-    collected: List[IndexedChunk] = []
-    for page in pages:
-        collected.extend(index.get((doc_id, page), ()))
-    return collected
+    position = {cid: i for i, cid in enumerate(corpus_ids)}
+    union: dict[str, set[str]] = {item.id: set() for item in items if item.expected == "answer"}
+    for r in resolutions:
+        union[r.question_id].update(r.resolution.formal_chunk_ids)
+    return {qid: sorted(ids, key=position.__getitem__) for qid, ids in union.items()}
 
 
-def resolve_citation(question_id: str, citation: dict, index: PageIndex) -> CitationResolution:
-    """Resolve one citation to chunk ids by trying L1, L2, L3 then L4 in order.
-
-    Assumes ``citation`` has passed the validation in :func:`load_questions`.
-    Never raises for an unresolvable citation: that is returned as a FAIL
-    resolution carrying no chunk ids.
-    """
-    doc_id = str(citation["doc_id"])
-    pdf_page = citation["pdf_page"]
-    norm_quote = normalize_whitespace(str(citation["quote"]))
-    same_page = _chunks_on_pages(index, doc_id, (pdf_page,))
-    window = range(pdf_page - PAGE_WINDOW, pdf_page + PAGE_WINDOW + 1)
-
-    exact = [c for c in same_page if norm_quote in c.norm_text]
-    if exact:
-        level, matches = LEVEL_L1, exact
-    else:
-        neighbours = _chunks_on_pages(index, doc_id, window)
-        spilled = [c for c in neighbours if norm_quote in c.norm_text]
-        if spilled:
-            level, matches = LEVEL_L2, spilled
-        else:
-            prefix = norm_quote[:FUZZY_PREFIX_CHARS]
-            fuzzy = [c for c in neighbours if prefix in c.norm_text]
-            if fuzzy:
-                level, matches = LEVEL_L3, fuzzy
-            elif same_page:
-                level, matches = LEVEL_L4, same_page
-            else:
-                level, matches = LEVEL_FAIL, []
-
-    return CitationResolution(
-        question_id=question_id,
-        doc_id=doc_id,
-        section=str(citation["section"]),
-        pdf_page=pdf_page,
-        norm_quote=norm_quote,
-        match_level=level,
-        chunk_ids=tuple(c.chunk_id for c in matches),
+def identity_map(testset_path: str, testset_sha: str, corpus_sha: str,
+                 mapping: dict[str, list[str]]) -> GoldChunkMap:
+    """用契约 helper 与权威 builder 构造 GoldChunkMap；本函数不持有任何身份值。"""
+    return GoldChunkMap(
+        testset_version=testset_version_from_path(testset_path),
+        testset_sha256=testset_sha,
+        corpus_chunks_sha256=corpus_sha,
+        corpus_builder_name=builder_identity.CORPUS_BUILDER_NAME,
+        construction_rules_sha256=builder_identity.construction_rules_identity(),
+        chunker_config=builder_identity.effective_chunker_config_identity(),
+        contracts_version=contracts.CONTRACTS_VERSION,
+        mapping=mapping,
+        gold_chunk_map_semantics_version=contracts.GOLD_CHUNK_MAP_SEMANTICS_VERSION,
     )
 
 
-def fill_gold_chunk_ids(questions: List[dict], index: PageIndex) -> List[CitationResolution]:
-    """Resolve every citation of every ``expected == "answer"`` question.
+# ==============================================================================
+# 输出
+# ==============================================================================
 
-    Mutates each such question in place, replacing ``gold_chunk_ids`` with the
-    union of its citations' matches, de-duplicated and kept in first-seen order.
-    Questions expecting a refusal are left untouched — including their citations,
-    which document a distractor rather than an answer location.
-
-    Returns one resolution per citation processed, in evaluation-set order.
-    """
-    resolutions: List[CitationResolution] = []
-    for question in questions:
-        if question["expected"] != EXPECTED_ANSWER:
-            continue
-        gold_ids: List[str] = []
-        for citation in question["citations"]:
-            resolution = resolve_citation(str(question["id"]), citation, index)
-            resolutions.append(resolution)
-            for chunk_id in resolution.chunk_ids:
-                if chunk_id not in gold_ids:
-                    gold_ids.append(chunk_id)
-        question["gold_chunk_ids"] = gold_ids
-    return resolutions
+def _bool(value: bool) -> str:
+    return CSV_TRUE if value else CSV_FALSE
 
 
-def write_resolved_testset(questions: Sequence[dict], out_path: str) -> None:
-    """Write the questions back as JSONL, one record per line.
-
-    Field order and every field other than ``gold_chunk_ids`` are carried over
-    untouched; non-ASCII text is written as-is rather than escaped.
-
-    Raises:
-        OSError: the destination cannot be written.
-    """
-    with open(out_path, "w", encoding="utf-8") as handle:
-        for question in questions:
-            handle.write(json.dumps(question, ensure_ascii=False) + "\n")
-
-
-def write_report(resolutions: Sequence[CitationResolution], out_path: str) -> None:
-    """Write one CSV row per resolved citation, with REPORT_COLUMNS as header.
-
-    ``quote_head`` is the normalised quote truncated to QUOTE_HEAD_CHARS, so a
-    reader can eyeball what was searched for; it is not the matching input.
-
-    Raises:
-        OSError: the destination cannot be written.
-    """
-    with open(out_path, "w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(REPORT_COLUMNS)
+def write_report(resolutions: Sequence[CitationResolution], path: str) -> None:
+    """按 contracts.GOLD_CHUNK_MAP_REPORT_COLUMNS 写 report.csv（UTF-8，"\\n" 换行，逐字节确定）。"""
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle, lineterminator="\n")
+        writer.writerow(contracts.GOLD_CHUNK_MAP_REPORT_COLUMNS)
         for r in resolutions:
-            writer.writerow(
-                [
-                    r.question_id,
-                    r.doc_id,
-                    r.section,
-                    r.pdf_page,
-                    r.norm_quote[:QUOTE_HEAD_CHARS],
-                    r.match_level,
-                    CHUNK_ID_SEPARATOR.join(r.chunk_ids),
-                    len(r.chunk_ids),
-                    r.needs_review,
-                ]
+            res = r.resolution
+            fragments_json = json.dumps(
+                [{"index": m.index, "text": m.text, "length": len(m.text),
+                  "sole_match_eligible": m.sole_match_eligible, "candidate_chunk_ids": list(m.candidate_chunk_ids)}
+                 for m in res.fragments],
+                ensure_ascii=False, separators=(",", ":"),
             )
+            writer.writerow([
+                r.question_id, r.citation_index, r.citation.doc_id, r.citation.section, r.citation.pdf_page,
+                _bool(r.section_exact_match), len(res.fragments), res.level, contracts.MATCH_LEVEL_REASON[res.level],
+                CHUNK_ID_SEPARATOR.join(res.formal_chunk_ids), CHUNK_ID_SEPARATOR.join(res.candidate_chunk_ids),
+                _bool(res.level not in contracts.FORMAL_MATCH_LEVELS), fragments_json,
+            ])
 
 
-def print_summary(resolutions: Sequence[CitationResolution]) -> None:
-    """Print per-level counts, the needs-review count, and every failing citation.
+def _refuse_existing(path: str) -> None:
+    """输出文件已存在即拒绝运行：避免旧的"已接受映射"与新的失败 report 并存。"""
+    if os.path.exists(path):
+        raise ResolverInputError(f"输出文件已存在，拒绝覆盖（请换用新的 --out-dir 或先人工移除）: {path}")
 
-    Failures are listed individually and by question id: a FAIL means the quote,
-    the page or the parser is wrong, and it is the finding this script exists to
-    surface.
-    """
-    total = len(resolutions)
-    print(f"citations resolved: {total}")
-    for level in MATCH_LEVELS:
-        count = sum(1 for r in resolutions if r.match_level == level)
-        share = (count / total * 100) if total else 0.0
-        print(f"  {level:<4} {count:>4}  ({share:5.1f}%)")
-    print(f"needs_review: {sum(1 for r in resolutions if r.needs_review)}")
 
-    failures = [r for r in resolutions if r.match_level == LEVEL_FAIL]
-    print(f"FAILED citations: {len(failures)}")
-    if failures:
-        failed_qids = []
-        for r in failures:
-            if r.question_id not in failed_qids:
-                failed_qids.append(r.question_id)
-        print(f"  failed question_id(s): {', '.join(failed_qids)}")
-        for r in failures:
-            print(f"    {r.question_id}  {r.doc_id} §{r.section} p.{r.pdf_page}  {r.norm_quote[:QUOTE_HEAD_CHARS]}")
-
+# ==============================================================================
+# CLI
+# ==============================================================================
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    """Parse the four mandatory path arguments. Exits non-zero on bad usage."""
-    parser = argparse.ArgumentParser(
-        description="Resolve evaluation-set citations onto corpus chunk ids."
-    )
-    parser.add_argument("--chunks", required=True, help="input corpus JSONL")
-    parser.add_argument("--testset", required=True, help="input evaluation set JSONL")
-    parser.add_argument("--out-testset", required=True, help="output evaluation set JSONL")
-    parser.add_argument("--out-report", required=True, help="output per-citation CSV report")
+    """四个必填参数；不接受缩写，不接受遗留的 --out-testset。"""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0], allow_abbrev=False)
+    parser.add_argument("--chunks", required=True, help="冻结语料 chunks.jsonl")
+    parser.add_argument("--testset", required=True, help="评测集 testset_v<MAJOR>_<MINOR>.jsonl（只读）")
+    parser.add_argument("--corpus-sha", required=True, help="语料 sha256 期望值断言（8 位或 64 位）")
+    parser.add_argument("--out-dir", required=True, help="输出目录")
     return parser.parse_args(argv)
 
 
-def main(argv: Sequence[str]) -> None:
-    """Run the backfill end to end and print the summary. Raises on bad input."""
-    args = parse_args(argv)
-    index, n_chunks = load_page_index(args.chunks)
-    questions = load_questions(args.testset)
-    print(f"loaded {n_chunks} chunks over {len(index)} (doc_id, pdf_page) pages from {args.chunks}")
-    print(f"loaded {len(questions)} questions from {args.testset}")
+def run(chunks_path: str, testset_path: str, asserted_corpus_sha: str, out_dir: str) -> int:
+    """执行一次解析。返回退出码（0 或 EXIT_MAP_NOT_ACCEPTED）；输入/契约错误抛异常。"""
+    testset_sha_before = file_sha256(testset_path)
+    corpus_sha = file_sha256(chunks_path)
+    check_corpus_sha_assertion(asserted_corpus_sha, corpus_sha)
 
-    resolutions = fill_gold_chunk_ids(questions, index)
-    write_resolved_testset(questions, args.out_testset)
-    write_report(resolutions, args.out_report)
+    corpus_ids, pages = load_corpus(chunks_path)
+    items = load_testset(testset_path)
+    resolutions = resolve_all(items, pages)
+    unresolved = [r for r in resolutions if r.resolution.level not in contracts.FORMAL_MATCH_LEVELS]
 
-    answered = sum(1 for q in questions if q["expected"] == EXPECTED_ANSWER)
-    print(f"questions with expected=={EXPECTED_ANSWER!r}: {answered}")
-    print_summary(resolutions)
-    print(f"wrote {args.out_testset}")
-    print(f"wrote {args.out_report}")
+    naming = identity_map(testset_path, testset_sha_before, corpus_sha, {})
+    os.makedirs(out_dir, exist_ok=True)
+    report_path = os.path.join(out_dir, naming.report_filename())
+    map_path = os.path.join(out_dir, naming.filename())
+    _refuse_existing(report_path)
+    _refuse_existing(map_path)
+
+    write_report(resolutions, report_path)
+    _print_summary(items, resolutions)
+
+    if file_sha256(testset_path) != testset_sha_before:
+        raise ResolverInputError("评测集在运行期间被修改")
+    if unresolved:
+        print(f"MAP NOT ACCEPTED: {len(unresolved)} 条 answer citation 未解析为 L1/L2；只写 report: {report_path}")
+        for r in unresolved:
+            print(f"  {r.question_id}#{r.citation_index} {r.citation.doc_id} p{r.citation.pdf_page} "
+                  f"{r.resolution.level} {contracts.MATCH_LEVEL_REASON[r.resolution.level]}")
+        return EXIT_MAP_NOT_ACCEPTED
+
+    gold_map = identity_map(testset_path, testset_sha_before, corpus_sha,
+                            build_mapping(items, resolutions, corpus_ids))
+    validate_gold_chunk_map(
+        gold_map, items, corpus_ids,
+        {(r.question_id, r.citation_index): (r.resolution.level, r.resolution.formal_chunk_ids) for r in resolutions},
+        current_corpus_chunks_sha256=corpus_sha,
+        builder=builder_identity,
+    )
+    with open(map_path, "w", encoding="utf-8", newline="") as handle:
+        handle.write(serialize_gold_chunk_map(gold_map))
+    print(f"wrote {map_path}")
+    print(f"wrote {report_path}")
+    return 0
+
+
+def _print_summary(items: Sequence[EvalItem], resolutions: Sequence[CitationResolution]) -> None:
+    """打印题数、各级别条数；只打到 stdout，不进任何输出文件。"""
+    answer = sum(1 for i in items if i.expected == "answer")
+    print(f"questions={len(items)} answer={answer} refuse={len(items) - answer} citations={len(resolutions)}")
+    for level in contracts.MatchLevel.__args__:
+        print(f"  {level:<9} {sum(1 for r in resolutions if r.resolution.level == level)}")
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    return run(args.chunks, args.testset, args.corpus_sha, args.out_dir)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    sys.exit(main())

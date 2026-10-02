@@ -1,0 +1,152 @@
+S4a.9c-final · canonical corpus token / packing measurement（measurement only，不改任何 contract）
+================================================================================================
+[0] provenance
+    corpus                  = corpus/chunks.jsonl sha256=c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb chunks=3409
+    page_quality            = ingest/page_quality.jsonl sha256=698428966639264203996f393ea4bc5a1fb03cf19ae1d050450eb6d6b41f7001
+    accepted_manifest       = experiments/ocr_survey/_phase_b_accepted_artifacts_manifest.jsonl sha256=c0e5b0371dc315b97d43e1d01d7049e5ee05493bdec3756c07765326efe07337
+    prereg                  = _9c_prereg.txt sha256=1c4d87b089fd5db9dd074ffc6e83185d9b0ae73fe189b6fa07f19b9e303d9105
+    measurement script      = scripts/s4a9c_final_canonical.py sha256=3f504edba45b869d4c11d701338bea082eab2fe0c207e3d740f84a8dc1251399
+    git_commit              = 872944db8f518bf8fa4b83416bbc21637debbfbf
+    model / digest          = phi4-mini:latest / 78fad5d182a7c33065e153a5f8ba210754207ba9d91973f57dffa7f487363753
+    count method            = /api/generate raw=true prompt_eval_count, num_ctx=4096, num_predict=1
+    render                  = '[{doc_id} §{section} PDF p.{pdf_page}]' + '\n' + text
+    window construction     = corpus 顺序每个起点取连续 5 块（旧 9c protocol 原样）
+    ratio 方向              = actual / estimated；>1 = estimator 低估 = 危险侧；<1 = 保守
+
+[1] EXECUTABLE_CONTRACT_BEFORE_9C_FINAL（直接 import core.contracts，未修改）
+    MAX_PROMPT_TOKENS                = 1050
+    PROMPT_OVERHEAD_RESERVE_TOKENS   = 200
+    CONTEXT_PACK_MARGIN              = 0.9
+    CONTEXT_PACK_BUDGET_TOKENS       = 765
+    CHARS_PER_TOKEN_EST              = 4
+    CHUNK_TARGET_TOKENS              = 350
+    CHUNK_OVERLAP_TOKENS             = 60
+    CITATION_HEADER_EST_TOKENS       = 14
+    TOP_K_CONTEXT                    = 5
+    HISTORICAL_CANDIDATE (NOT EXECUTABLE CONTRACT) = X=950 O=206 m=0.86 -> B=639
+
+[2] 五种 token 量（不得互相替代）
+    Q1 CHUNK_TARGET_TOKENS   INPUT_PARAMETER   = 350
+    Q2 CHUNK_OVERLAP_TOKENS  INPUT_PARAMETER   = 60
+    Q3 actual chunk tokens   MEASURED_OUTPUT   : n=3409  min=5  p1=20.08  p5=37  p10=60  p25=109  p50=189  p75=252  p90=287  p95=313  p99=418.8  max=625  mean=182.8
+    Q4 est_tokens()          ESTIMATOR_OUTPUT  = max(1, chars // CHARS_PER_TOKEN_EST=4)
+       est_tokens 分布       : n=3409  min=30  p1=34.08  p5=56.4  p10=83  p25=162  p50=274  p75=329  p90=344  p95=347  p99=358  max=378  mean=241.5
+    Q5 rendered context cost MEASURED_OUTPUT   = tok(SEP.join(render_j))，含 header/separator/边界合并
+    CHUNK_TARGET_TOKENS != actual chunk token count
+    actual chunk token count != est_tokens()
+    est_tokens() != rendered prompt/context actual token cost
+
+[3] Measurement A —— canonical chunk actual token distribution
+    chars                  : n=3409  min=120  p1=139.1  p5=227.4  p10=334  p25=648  p50=1097  p75=1316  p90=1376  p95=1391  p99=1434  max=1515  mean=967.7
+    actual_text_tokens     : n=3409  min=5  p1=20.08  p5=37  p10=60  p25=109  p50=189  p75=252  p90=287  p95=313  p99=418.8  max=625  mean=182.8
+    actual_rendered_tokens : n=3409  min=14  p1=33  p5=49  p10=70.8  p25=119  p50=199  p75=262  p90=298  p95=322.6  p99=430.8  max=634  mean=193.2
+    chars/actual_token     : n=3409  min=2.048  p1=2.75  p5=3.691  p10=4.195  p25=4.68  p50=5.148  p75=6  p90=8.107  p95=10.25  p99=19.33  max=37.6  mean=5.897
+    header_increment       : n=3409  min=9  p1=9  p5=9  p10=9  p25=9  p50=10  p75=11  p90=13  p95=13  p99=16  max=28  mean=10.46  （对照 CITATION_HEADER_EST_TOKENS=14）
+    descriptive breakdown（仅解释证据，不据此调 parser/chunker）:
+      doc=CMM   n=  391 actual_tok p50=221 p95=314 ratio p50=0.7895 p95=1.0908
+      doc=CRM   n=  256 actual_tok p50=110.5 p95=267 ratio p50=0.5223 p95=0.9930
+      doc=EMM   n=  344 actual_tok p50=190 p95=295 ratio p50=0.7801 p95=0.9705
+      doc=ERM   n=  377 actual_tok p50=180 p95=304.2 ratio p50=0.8152 p95=1.0030
+      doc=FMM   n=  883 actual_tok p50=189 p95=336.7 ratio p50=0.7368 p95=1.2302
+      doc=NPM   n=  286 actual_tok p50=212.5 p95=303.8 ratio p50=0.8333 p95=0.9812
+      doc=QMM   n=  423 actual_tok p50=196 p95=285 ratio p50=0.7630 p95=0.9666
+      doc=SMM   n=  304 actual_tok p50=195 p95=303.1 ratio p50=0.7968 p95=0.9837
+      doc=TACM  n=  145 actual_tok p50=212 p95=404.6 ratio p50=0.9249 p95=1.3937
+      channel=native n= 3333 chars/token p50=5.1746 p95=10.2743 max=37.6000 | ratio p50=0.7748 p95=1.0546 max=1.7333 n(>1.15)=117
+      channel=ocr    n=   76 chars/token p50=4.3310 p95=5.1735 max=13.6818 | ratio p50=0.9258 p95=1.2193 max=2.0000 n(>1.15)=12
+      ordinal=0    n= 1250 ratio p50=0.7973 p95=1.1865
+      ordinal=1    n= 1000 ratio p50=0.7794 p95=1.0396
+      ordinal=2    n=  621 ratio p50=0.7629 p95=0.9655
+      ordinal>=3   n=  538 ratio p50=0.7276 p95=1.0151
+
+[4] Measurement B —— estimator error（ratio = actual / estimated；>1 = 低估 = 危险侧）
+    text  actual/est_tokens        : n=3409  min=0.1064  p1=0.2069  p5=0.3912  p10=0.4941  p25=0.6679  p50=0.7784  p75=0.856  p90=0.956  p95=1.087  p99=1.455  max=2  mean=0.7616
+    rend  actual/est_prompt_tokens : n=3409  min=0.1875  p1=0.2624  p5=0.4146  p10=0.5137  p25=0.6721  p50=0.7755  p75=0.848  p90=0.9382  p95=1.049  p99=1.372  max=1.664  mean=0.7598
+    estimated - actual (text)      : n=3409  min=-258  p1=-98  p5=-11  p10=6  p25=24  p50=52  p75=86  p90=133  p95=171  p99=212  max=264  mean=58.76
+    危险尾部计数:
+      ratio > 1.00: text n=  249 (  7.30%)   rendered n=  226 (  6.63%)
+      ratio > 1.05: text n=  196 (  5.75%)   rendered n=  169 (  4.96%)
+      ratio > 1.10: text n=  157 (  4.61%)   rendered n=  134 (  3.93%)
+      ratio > 1.15: text n=  129 (  3.78%)   rendered n=  110 (  3.23%)
+      ratio > 1.20: text n=  103 (  3.02%)   rendered n=   86 (  2.52%)
+      ratio > 1.30: text n=   58 (  1.70%)   rendered n=   47 (  1.38%)
+      ratio > 1.50: text n=   30 (  0.88%)   rendered n=   22 (  0.65%)
+    最坏 15 个 chunk（text ratio 降序）:
+      QMM:p19:0        QMM   p.19   ocr    chars=  127 est=  31 actual=   62 ratio=2.0000 [none_observed]
+      FMM:p240:1       FMM   p.240  native chars=  303 est=  75 actual=  130 ratio=1.7333 [none_observed]
+      FMM:p55:0        FMM   p.55   native chars= 1469 est= 367 actual=  625 ratio=1.7030 [none_observed]
+      FMM:p168:1       FMM   p.168  native chars=  149 est=  37 actual=   63 ratio=1.7027 [none_observed]
+      FMM:p55:1        FMM   p.55   native chars=  355 est=  88 actual=  149 ratio=1.6932 [none_observed]
+      FMM:p242:1       FMM   p.242  native chars=  356 est=  89 actual=  149 ratio=1.6742 [none_observed]
+      FMM:p169:0       FMM   p.169  native chars= 1253 est= 313 actual=  524 ratio=1.6741 [none_observed]
+      FMM:p85:0        FMM   p.85   native chars= 1331 est= 332 actual=  554 ratio=1.6687 [none_observed]
+      FMM:p113:0       FMM   p.113  native chars= 1419 est= 354 actual=  589 ratio=1.6638 [none_observed]
+      FMM:p88:0        FMM   p.88   native chars= 1215 est= 303 actual=  495 ratio=1.6337 [none_observed]
+      FMM:p201:0       FMM   p.201  native chars= 1053 est= 263 actual=  427 ratio=1.6236 [none_observed]
+      FMM:p168:0       FMM   p.168  native chars= 1325 est= 331 actual=  536 ratio=1.6193 [none_observed]
+      FMM:p54:0        FMM   p.54   native chars= 1130 est= 282 actual=  452 ratio=1.6028 [none_observed]
+      FMM:p114:0       FMM   p.114  native chars= 1450 est= 362 actual=  580 ratio=1.6022 [none_observed]
+      FMM:p87:0        FMM   p.87   native chars= 1289 est= 322 actual=  512 ratio=1.5901 [none_observed]
+
+[5] Measurement C —— real separator incremental cost（真实相邻 rendered chunk）
+    注: separator incremental cost 与 CITATION_HEADER_EST_TOKENS 是不同的量。
+    SEP='\n': n=3408  min=0  p1=0  p5=0  p10=0  p25=0  p50=0  p75=1  p90=1  p95=1  p99=1  max=1  mean=0.4413
+      分布: +0:1904  +1:1504
+    SEP='\n\n': n=3408  min=0  p1=0  p5=0  p10=0  p25=0  p50=0  p75=1  p90=1  p95=1  p99=1  max=1  mean=0.444
+      分布: +0:1895  +1:1513
+
+[6] Measurement D —— real rendered windows（两套预算分栏）
+    --- CURRENT_EXECUTABLE: X=1050 O=200 m=0.9 B=765 ---
+      SEP='\n': windows=3405  within_budget=3370  overbudget=35  rate=1.03%
+        actual_total_prompt : p50=670 p95=861 p99=1052 max=1388
+        max_overage=338  est_safe_but_actual_over=35  est_over_but_actual_safe=0  all_none_observed_over=35
+        realized k: k=2:1782  k=3:1400  k=4:197  k=5:26
+        worst: window=1660 k=2 actual_total=1388 over_by=+338
+        worst: window=1846 k=3 actual_total=1352 over_by=+302
+        worst: window=1661 k=3 actual_total=1336 over_by=+286
+        worst: window=2052 k=3 actual_total=1305 over_by=+255
+        worst: window=1578 k=2 actual_total=1298 over_by=+248
+      SEP='\n\n': windows=3405  within_budget=3370  overbudget=35  rate=1.03%
+        actual_total_prompt : p50=670 p95=861 p99=1052 max=1388
+        max_overage=338  est_safe_but_actual_over=35  est_over_but_actual_safe=0  all_none_observed_over=35
+        realized k: k=2:1782  k=3:1400  k=4:197  k=5:26
+        worst: window=1660 k=2 actual_total=1388 over_by=+338
+        worst: window=1846 k=3 actual_total=1352 over_by=+302
+        worst: window=1661 k=3 actual_total=1336 over_by=+286
+        worst: window=2052 k=3 actual_total=1305 over_by=+255
+        worst: window=1578 k=2 actual_total=1298 over_by=+248
+    --- HISTORICAL_CANDIDATE_NOT_EXECUTABLE: X=950 O=206 m=0.86 B=639   ⚠️ NOT EXECUTABLE CONTRACT ---
+      SEP='\n': windows=3405  within_budget=3386  overbudget=19  rate=0.56%
+        actual_total_prompt : p50=575 p95=751 p99=893 max=1153
+        max_overage=203  est_safe_but_actual_over=19  est_over_but_actual_safe=0  all_none_observed_over=19
+        realized k: k=1:611  k=2:2120  k=3:612  k=4:53  k=5:9
+        worst: window=600 k=2 actual_total=1153 over_by=+203
+        worst: window=1946 k=2 actual_total=1147 over_by=+197
+        worst: window=3401 k=2 actual_total=1125 over_by=+175
+        worst: window=1848 k=2 actual_total=1115 over_by=+165
+        worst: window=1177 k=2 actual_total=1077 over_by=+127
+      SEP='\n\n': windows=3405  within_budget=3386  overbudget=19  rate=0.56%
+        actual_total_prompt : p50=575 p95=751 p99=893 max=1153
+        max_overage=203  est_safe_but_actual_over=19  est_over_but_actual_safe=0  all_none_observed_over=19
+        realized k: k=1:611  k=2:2120  k=3:612  k=4:53  k=5:9
+        worst: window=600 k=2 actual_total=1153 over_by=+203
+        worst: window=1946 k=2 actual_total=1147 over_by=+197
+        worst: window=3401 k=2 actual_total=1125 over_by=+175
+        worst: window=1848 k=2 actual_total=1115 over_by=+165
+        worst: window=1177 k=2 actual_total=1077 over_by=+127
+
+[7] none_observed deep dive（旧定义原样恢复）
+    全语料标签计数: none_observed=3298  section_suspicious=59  whitespace_heavy=79
+    population n=3298
+    text  actual/est_tokens        : n=3298  min=0.1667  p1=0.2867  p5=0.4456  p10=0.5453  p25=0.6844  p50=0.7831  p75=0.8591  p90=0.9638  p95=1.095  p99=1.462  max=2  mean=0.7764
+    rend  actual/est_prompt_tokens : n=3298  min=0.2372  p1=0.3304  p5=0.4659  p10=0.5563  p25=0.6863  p50=0.7792  p75=0.8511  p90=0.9431  p95=1.055  p99=1.391  max=1.664  mean=0.7726
+      ratio > 1.00: text n=  249   rendered n=  226
+      ratio > 1.05: text n=  196   rendered n=  169
+      ratio > 1.10: text n=  157   rendered n=  134
+      ratio > 1.15: text n=  129   rendered n=  110
+      ratio > 1.20: text n=  103   rendered n=   86
+      ratio > 1.30: text n=   58   rendered n=   47
+      ratio > 1.50: text n=   30   rendered n=   22
+    任一异常标签（对照）n=111  text ratio p50=0.3369 p95=0.5493 max=0.8158
+
+注: 本日志只产出 measurement evidence；不选择、不冻结、不修改任何 contract 取值。
