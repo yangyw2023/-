@@ -4199,3 +4199,92 @@ embedding dependency 尚未完全冻结 → `HYBRID_BASELINE_READY = NO`"由本�
 - **N. `TEST_SET_TUNING_PERFORMED = NO`。**
 - **O. `PROTOCOL_DRIFT = NO`。**
 - **P. S8 剩余**：`FAILURE_ATTRIBUTION = PENDING`；`RERANKER_L1_DECISION = PENDING` → **`S8_OVERALL_STATUS = OPEN`**。
+
+
+## 2026-10-02 · S8 failure attribution protocol closure
+
+人工裁决（Arya）：S8 retrieval failure attribution 的口径、FailureTag 适用范围与 AI / human 分工。本条由 AI 按裁决落地并机械生成人工审核包；
+**没有任何题被 AI 赋予最终 FailureTag。** `FAILURE_ATTRIBUTION_PROTOCOL_STATUS = FROZEN`；`FAILURE_ATTRIBUTION_STATUS = PENDING_HUMAN`；
+`RERANKER_L1_DECISION = PENDING`；`S8_OVERALL_STATUS = OPEN`。
+
+### authority 摘录（只读，未改任何 authority 文件）
+
+- 执行手册 S8.5 要回答的三个问题：① `TOP_K_RETRIEVE=20` 够不够（Recall@20 曲线）；② 要不要引入 reranker（Recall@2 vs Recall@20）；
+  ③ 失败的题为什么失败（逐题明细 + 十个归因标签 → M5 该调什么）。本步应入库：`[L2] M1c 检索基线` + `[L1] 是否引入 reranker`（带 falsified_if）。
+- 失败归因 owner：实施方案 v0.13 §18 分工原则 —— Arya 负责"缺陷归因"。
+- FailureTag：`core/contracts.py` L496–507，10 个值：parse_failure、chunk_boundary、bm25_miss、vector_miss、fusion_miss、ranking_miss、
+  context_truncation、generation_miss、refusal_miss、distractor_capture。contracts 注释引用的"实施方案 §24.3"在 v0.13 中不存在（`LOCATOR_NOT_FOUND`，
+  本轮只登记，不改 contracts）。contracts `EvalItemResult.failure_tag` 是 M2 答案级字段（只在 scored_as == 0 时填）；本条的 `human_failure_tag`
+  是 S8 审核包字段，不写入 EvalItemResult / `eval/results.csv`。
+
+### [L2] 失败单元（FROZEN）
+
+- **A. `CANDIDATE_RETRIEVAL_MISS(q, r)` ⇔ `gold(q) ∩ top20(q, r) = ∅`**，q ∈ 31 道可答题，r ∈ {BM25, VECTOR, HYBRID}；gold = GoldChunkMap.mapping[q]，
+  top20 = 已提交 S8 artifact 中该题保存的排序。由 committed artifact 重算（`MEASURED`）：BM25 = PR03、PR04、ML01、ML02；VECTOR = FL14；HYBRID = 无。
+- **B. `RANKING_DIAGNOSTIC`**：31 道可答题 × 三路的 first_gold_rank 与 gold_ranks。只是诊断，**不是**自动 failure label；rank > 1 不得自动记为
+  ranking_miss；是否触发 reranker 由后续 S8.5 decision rule 判断。
+- **refuse / trap（8 题）**：不进入 CANDIDATE_RETRIEVAL_MISS 的可答题分母；top hits、match_score、relevance、route diagnostics 保留在三份已提交
+  artifact 中，供 S9 阈值校准与后续拒答分析。本轮不赋 refusal_miss（生成 / 拒答行为尚未运行）。
+
+### [L2] FailureTag 适用性矩阵（FROZEN；定义 = contracts L497–506 注释）
+
+| FailureTag | 分类 | 理由 |
+|---|---|---|
+| `parse_failure` | S8_RETRIEVAL_APPLICABLE | 候选未召回的根因可能在解析阶段；冻结 corpus 中 gold chunk 正文已在审核包内，可判断内容是否丢失 / 受损 |
+| `chunk_boundary` | S8_RETRIEVAL_APPLICABLE | chunk 边界由冻结 corpus 固定；审核包给出全部 gold chunk 与 gold_count，切分可在 S8 观察 |
+| `bm25_miss` | S8_RETRIEVAL_APPLICABLE | 直接对应 CANDIDATE_RETRIEVAL_MISS(q, BM25)，可从冻结 BM25 top-20 判断 |
+| `vector_miss` | S8_RETRIEVAL_APPLICABLE | 直接对应 CANDIDATE_RETRIEVAL_MISS(q, VECTOR) |
+| `fusion_miss` | S8_RETRIEVAL_APPLICABLE | 融合是 S8 组件；hybrid artifact 的 route_diagnostics 给出两路 rank 与融合 rank |
+| `ranking_miss` | DEFER_TO_PACKING | 定义是"进了 top-k_retrieve 但没进 context"，依赖 context packing；fixed-k baseline 不含 packing（D3 / D15） |
+| `context_truncation` | DEFER_TO_PACKING | 定义是"进了 context 但被 token 预算截断"（另见 contracts pack_context 文档）；final-budget packed 结论要等 numeric contract freeze（D3 / D15、prereg §11），authority 未允许 provisional 标签 |
+| `generation_miss` | DEFER_TO_GENERATION | "证据在 context 里，但模型没用"，需要生成运行 |
+| `refusal_miss` | DEFER_TO_GENERATION | "该答却拒答"，取决于 MIN_RELEVANCE 拒答判定（S9）与答案行为（M2），S8 均未运行 |
+| `distractor_capture` | DEFER_TO_GENERATION | "被干扰项俘获"是拒答题的答案级结果，需要生成运行 |
+
+- **context_truncation 边界**：本轮不得以最终意义的 context_truncation 给任何题下结论。BM25 已有的 current-contract packing 结果（BM25 closure E）
+  只作 descriptive evidence，不是 final failure tag。
+
+### [L2] 分工（FROZEN）
+
+- **`AI_ROLE = PREPARE_EVIDENCE_ONLY`**：机械计算 ranks、lexical overlap（仅用冻结 BM25 analyzer）、摘出冻结 chunk / 题目字段 / route diagnostics、
+  列出矩阵中 S8 可用的 FailureTag。不替人选最终 tag，不把解释写成 MEASURED，不因归因改 retrieval protocol。
+- **`HUMAN_ROLE = FINAL_FAILURE_ATTRIBUTION`**：人工字段 `human_failure_tag`（初始 `PENDING_HUMAN`）、`human_failure_note`（初始空）。
+  取值只从矩阵 S8_RETRIEVAL_APPLICABLE 类中选；"无检索失败"的哨兵值与是否允许多标签本协议未规定，由人工填写时裁决。
+
+### [L2] 审核人口（机械规则，FROZEN）
+
+- **Tier 1（必须审核）**：任一路 CANDIDATE_RETRIEVAL_MISS，或执行手册 / prereg 明确点名并附观察 / 审核 / 归因要求的题：
+  CD01（执行手册 S8.4"CD01 的单独观察结果"）；ML01 / ML02 / ML03（执行手册 S8.4：多语种检索 Recall 单独报，embedder 与生成模型的归因区分须在 M2 前做出）；
+  CN03（prereg §8.2 `ANNOTATION_CONFLICT_REQUIRES_HUMAN_REVIEW`，是标注冲突而非检索失败指定）。
+  → `TIER1 = FL14, CN03, PR03, PR04, CD01, ML01, ML02, ML03`（8）。
+- **Tier 2（ranking diagnostic）**：某一路 first_gold_rank > 5 且该路 top-20 仍有 gold；不人工挑题。
+  → `TIER2 = FL08(vector), FL14(hybrid), CN02(bm25), CN04(bm25), PR01(bm25), PR03(hybrid), PR04(hybrid), CD03(bm25)`（8）。
+- 并集 13 题：FL08、FL14、CN02、CN03、CN04、PR01、PR03、PR04、CD01、CD03、ML01、ML02、ML03；同属两层的题标 TIER1。
+
+### 审核包 artifact
+
+- 生成器 `experiments/m1c_s8_attribution/build_attribution_packet.py`（`bd32b8852a010bfb8913cc743cc6d6d54fa4bf436df8327d48ded259267d0fb1`）：
+  只读冻结输入，各自 sha 与冻结字面量比较；不检索、不调用 LLM / Ollama / 网络；拒绝覆盖；重复生成逐字节相同。
+- `failure_attribution_packet.csv`（`c1a033978447b787f9e6c9140371a98c6acbdf4b3a8a0c68670a7be1b5e9fc34`，13 行，人工填写处）；
+  `failure_attribution_packet.md`（`7768390c029eef29a7af35cd6b3e99cb0947174011eba3af55242cdae18859d4`，逐题证据 + 附录 A 全部 31 题 ranking diagnostic +
+  附录 B TOP_K evidence + 附录 C refuse / trap 描述）。
+- 独立 QA PASS：Tier 1 / Tier 2 人口、gold ids、三路 ranks、top-5 hits 与冻结 artifact 一致；human_failure_tag 全为 PENDING_HUMAN，note 全空。
+
+### reranker 前提审计（只读）
+
+- `RERANKER_REAL_WINDOW_MEASUREMENT_REQUIRED = YES`（D2：真实 retrieval-window measurement 完成后再裁；prereg §7.5 同）。
+- `RERANKER_REAL_WINDOW_MEASUREMENT_ROUTE = NOT_SPECIFIED`：prereg §11 只写"在冻结的 S8 normative artifact 上、对每题已保存的 top-20 ranking"，
+  未指定 BM25 / vector / hybrid；不得由"BM25 已做过"推出三路都必须做。
+- 定义（prereg §11）：在已保存的 top-20 ranking 上，用当前可执行打包契约（pack_context，预算 765）及后续候选预算重新模拟 realized k 分布、
+  packed ANY / coverage / ALL_MAPPED_GOLD、overbudget、actual token cost；不重跑 retrieval；取代按语料顺序的连续窗口作为 reranker k 的证据。
+- `RERANKER_DECISION_THRESHOLD_STATUS = NOT_FROZEN`（D2）。本轮不裁阈值，不跑额外 packing measurement。
+
+### TOP_K_RETRIEVE = 20 evidence（决策 PENDING）
+
+- top-20 无 gold 的可答题：BM25 4 / 31（PR03、PR04、ML01、ML02）；vector 1 / 31（FL14）；hybrid 0 / 31（ANY_GOLD@20 = 31 / 31）。
+- 只是当前 39 题评测集上的 evidence，不自动证明 20 普遍足够；S8 L1 决策留到失败归因与 reranker 决策之后。
+
+### 状态
+
+- `FAILURE_ATTRIBUTION_PROTOCOL_STATUS = FROZEN`；`FAILURE_ATTRIBUTION_STATUS = PENDING_HUMAN`；`RERANKER_L1_DECISION = PENDING`；
+  **`S8_OVERALL_STATUS = OPEN`**。
