@@ -4146,3 +4146,56 @@ embedding dependency 尚未完全冻结 → `HYBRID_BASELINE_READY = NO`"由本�
 - D13 登记的 `CONTRACT_NARRATIVE_FOLLOWUP`（contracts Hit docstring "融合权重是 L2 参数（M1c 要扫）"）仍未处理，本轮不改 contracts。
 - hybrid baseline 是 fixed-k retrieval baseline，不读取 packing 相关常量（D3 / D15）。
 - `S8_OVERALL_STATUS = OPEN`（`HYBRID_BASELINE`、`FAILURE_ATTRIBUTION`、`RERANKER_L1_DECISION` 仍 PENDING）。
+
+
+## 2026-10-02 · S8 / M1c hybrid component closure
+
+**`S8_HYBRID_COMPONENT_STATUS = CLOSED`；`S8_OVERALL_STATUS = OPEN`。** 本条只记录 hybrid component 的正式证据；失败归因与 reranker L1 决策仍未完成（见 P）。
+
+### [L2] M1c hybrid 检索基线（component）
+
+- owner_experiment: S8 / M1c
+- **A. protocol**：`HYBRID_PROTOCOL_COMMIT_SHA = a0a92414e543b868f66bc016ec954c70b5420766`（人工裁决 H1–H10；prereg §16；
+  hybrid retrieval_config_digest `97ddd20aa9f4e837f188c7c6eb29c5eaa400544b5b2eff367c8e0eed4425e621`；RRF_K = 60；route depth BM25 20 / vector 20；权重 1 / 1）。
+- **B. implementation**：`HYBRID_IMPLEMENTATION_COMMIT_SHA = 1e07e1b08d58d9980b7c6cee3fd7b5d389e0b26d`；`components/retrievers/hybrid.py`
+  sha256 `1456b850b3ee2f0777d1937af6a130866948c751e9a513375f010073a2f9fbb5`；runner `eval/run_hybrid_eval.py`
+  sha256 `944306e34cbf3715c198e67e66d3012033b02bb757d7f94c525e54648e697f07`。
+- **C. 冻结输入（未重跑任何 retrieval / embedding）**：BM25 `experiments/m1c_s8_bm25/s8_bm25_results.jsonl`
+  `9ce4df232af8c395e0749dcb2fd9c84e5376a7939ae20af7005b12d54dac3ba8`；vector `experiments/m1c_s8_vector/s8_vector_results.jsonl`
+  `0e80682cfded9fb73db0b9204120582984f33604ab5bfbc88694d47f9d371073`。两路记录由 artifact 无损重建，并各自通过 `validate_retrieval_records(k=20)`。
+- **D. 正式证据**：`experiments/m1c_s8_hybrid/s8_hybrid_results.jsonl`（normative，首行 run identity）
+  `5d859a901f49155aa8be6f4e84f3b79bf8e564261d026f0397ef54a1cff5e9a8`；`s8_hybrid_metrics.json`
+  `97021b12a03d5e5e6535ea794af64f4e1e022667297d725538f34e9932152f81`；`s8_hybrid_run.log`
+  `3624a2783ec503a35b1bbbc75aebd21729a2cf41964dd8e82865d58db70d8e6d`。
+- **E. 39 / 39 题**；answer / refuse = 31 / 8；每题 route_diagnostics 与 hits 逐条对齐，per-route provenance 与两份 component artifact 一致。
+- **F. Run A / Run B**（全新进程、不同 PYTHONHASHSEED）normative artifact 逐字节相同。
+- **G. 独立复算 PASS**：不 import runner / 组件的 scratch 代码 ① 直接从两份 component artifact 重新融合，top-20 与 raw / relevance / match_score 逐条一致；
+  ② 从保存的 hybrid top-20 重算 31 题与 English 28 题 headline 及逐题 first_gold_rank，一致。
+- **H. headline（31 道可答题，macro）**：
+
+  | 指标 | @1 | @2 | @3 | @5 | @20 |
+  |---|---|---|---|---|---|
+  | ANY_GOLD | 0.581 (18/31) | 0.710 (22/31) | 0.774 (24/31) | 0.903 (28/31) | 1.000 (31/31) |
+  | GOLD_COVERAGE | 0.461 | 0.609 | 0.689 | 0.803 | 0.952 |
+  | ALL_MAPPED_GOLD | 0.387 (12/31) | 0.516 (16/31) | 0.613 (19/31) | 0.710 (22/31) | 0.903 (28/31) |
+
+- **I. 多语种**：first_gold_rank ML01（zh）= 2，ML02（tl）= 4，ML03（hi）= 1。
+- **J. 解释边界（`DESCRIPTIVE_ONLY = YES`）**：
+  - hybrid ANY@20 = 31 / 31 = 1.000：component 各自 top-20 遗漏的 gold（vector：FL14；BM25：PR03、PR04、ML01、ML02）都由另一路补回。
+  - hybrid ANY@1 / @2 / @5 = 0.581 / 0.710 / 0.903，低于 vector 的 0.645 / 0.871 / 0.935（BM25 为 0.452 / 0.548 / 0.742）。
+  - 结果产生后没有调融合权重、RRF_K、route depth 或任何协议项（执行手册 S8.4：hybrid 比单一 retriever 差时不调融合权重）。
+  - 不据此得出 hybrid 优于或劣于 vector、hybrid 应成为 production route、reranker 需要或不需要、answer quality 提高等结论 ——
+    S8.5 失败归因与 reranker L1 决策尚未执行。retrieval / evidence coverage ≠ answer quality；ALL_MAPPED_GOLD 仍为 strict map-union diagnostic。
+- **K. match_score 刻度 caveat（`HYBRID_MATCH_SCORE_IS_UNIFIED_CONFIDENCE = NO`）**：hybrid `match_score = max(present BM25 bm25_saturation,
+  present vector cosine_affine_01)`，两路 match_score 不是同一原始分布。观察（`MEASURED`）：8 道 refuse / trap 题的 max_match_score 为 0.749–0.779，
+  8 题的最大值全部来自 vector route（这些题 hits 中 BM25 match_score 最高 0.530–0.698）—— vector 刻度主导。只作 S9 calibration input；
+  本轮不改 match_score、不改 MIN_RELEVANCE、不校准阈值。
+- **L. T17 澄清（不是 protocol change）**：route list 的顺序有语义（位置 = route rank），随机打乱 route list 不是合法的"输入顺序扰动"，
+  实现对不符合该路全序的输入 fail-fast 是正确行为。要求 permutation invariant 的是 candidate 插入顺序、内部 dict 构造顺序、set 迭代顺序等非语义顺序。
+- **hybrid operator scope**：`components/retrievers/hybrid.py` 当前是 deterministic fusion operator，不是 Retriever 实现类；这不阻塞 M1c hybrid baseline。
+  production pipeline assembly 留给执行手册对应阶段。
+- **M. `S4A_9D_BLOCKS_HYBRID = NO`**：hybrid.py、runner 及其调用到的 base 函数均不读取 MAX_PROMPT_TOKENS / PROMPT_OVERHEAD_RESERVE_TOKENS /
+  CONTEXT_PACK_MARGIN / CONTEXT_PACK_BUDGET_TOKENS / CHARS_PER_TOKEN_EST / TOP_K_CONTEXT / pack_context（grep + AST），D3 / D15 falsified_if 未命中。
+- **N. `TEST_SET_TUNING_PERFORMED = NO`。**
+- **O. `PROTOCOL_DRIFT = NO`。**
+- **P. S8 剩余**：`FAILURE_ATTRIBUTION = PENDING`；`RERANKER_L1_DECISION = PENDING` → **`S8_OVERALL_STATUS = OPEN`**。
