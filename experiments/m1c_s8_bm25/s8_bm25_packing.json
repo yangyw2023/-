@@ -1,0 +1,887 @@
+{
+  "status": "real retrieval-window measurement on saved top-20 (current executable packing contract); descriptive",
+  "packing_contract": {
+    "max_tokens": 765,
+    "max_chunks": 5,
+    "reserve": 200,
+    "MAX_PROMPT_TOKENS": 1050,
+    "function": "core.contracts.pack_context (relevance prefix)"
+  },
+  "actual_tokens": "NOT_MEASURED_WITH_TOKENIZER (M1c prereg freezes no tokenizer protocol); proxy = sum of S4a.9c measured per-chunk actual_rendered_tokens, excludes separators (S4a.9c sep increment 0-1 token per join, so proxy undercounts joint tokenization by <= realized_k - 1)",
+  "windows_with_hits": 38,
+  "realized_k_distribution_all": {
+    "2": 30,
+    "3": 7,
+    "5": 1
+  },
+  "realized_k_distribution_answer": {
+    "2": 24,
+    "3": 5,
+    "5": 1
+  },
+  "stopped_by": {
+    "budget": 37,
+    "max_chunks": 1
+  },
+  "first_hit_alone_over_budget": [],
+  "est_context_tokens": {
+    "min": 374,
+    "median": 602,
+    "max": 748
+  },
+  "proxy_actual_context_tokens": {
+    "min": 262,
+    "median": 464,
+    "max": 625
+  },
+  "est_overbudget_count": 0,
+  "proxy_overbudget_count": 0,
+  "estimator_safe_but_proxy_over": [],
+  "packed_gold_current_contract_answer_31": {
+    "ANY_GOLD": 0.5806451612903226,
+    "GOLD_COVERAGE": 0.5118279569892473,
+    "ALL_MAPPED_GOLD": 0.45161290322580644,
+    "mean_realized_k": 2.193548387096774,
+    "n": 31
+  },
+  "tail_examples_by_proxy_tokens": [
+    {
+      "question_id": "FL11",
+      "realized_k": 3,
+      "est_context_tokens": 737,
+      "proxy_actual_context_tokens": 625,
+      "proxy_overbudget": false
+    },
+    {
+      "question_id": "FL04",
+      "realized_k": 3,
+      "est_context_tokens": 748,
+      "proxy_actual_context_tokens": 603,
+      "proxy_overbudget": false
+    },
+    {
+      "question_id": "CN02",
+      "realized_k": 2,
+      "est_context_tokens": 688,
+      "proxy_actual_context_tokens": 593,
+      "proxy_overbudget": false
+    }
+  ],
+  "sequential_window_comparison": {
+    "source": "experiments/gate2_raw/_s4a9c_final_canonical_windows.csv CURRENT_EXECUTABLE sep=\\n (corpus-order windows)",
+    "n_windows": 3405,
+    "realized_k_distribution": {
+      "2": 1782,
+      "3": 1400,
+      "4": 197,
+      "5": 26
+    },
+    "overbudget_rate_actual": 0.010279001468428781,
+    "real_retrieval_n_windows": 38,
+    "real_retrieval_proxy_overbudget_rate": 0.0
+  },
+  "descriptive_budget_table_not_a_contract": [
+    {
+      "budget_tokens": 400,
+      "max_chunks": 5,
+      "ANY_GOLD": 0.4838709677419355,
+      "GOLD_COVERAGE": 0.39623655913978495,
+      "ALL_MAPPED_GOLD": 0.3548387096774194,
+      "mean_realized_k": 1.1290322580645162,
+      "n": 31
+    },
+    {
+      "budget_tokens": 765,
+      "max_chunks": 5,
+      "ANY_GOLD": 0.5806451612903226,
+      "GOLD_COVERAGE": 0.5118279569892473,
+      "ALL_MAPPED_GOLD": 0.45161290322580644,
+      "mean_realized_k": 2.193548387096774,
+      "n": 31
+    },
+    {
+      "budget_tokens": 1170,
+      "max_chunks": 5,
+      "ANY_GOLD": 0.6774193548387096,
+      "GOLD_COVERAGE": 0.6193548387096774,
+      "ALL_MAPPED_GOLD": 0.5806451612903226,
+      "mean_realized_k": 3.5483870967741935,
+      "n": 31
+    },
+    {
+      "budget_tokens": 1500,
+      "max_chunks": 5,
+      "ANY_GOLD": 0.7419354838709677,
+      "GOLD_COVERAGE": 0.6758064516129032,
+      "ALL_MAPPED_GOLD": 0.6129032258064516,
+      "mean_realized_k": 4.580645161290323,
+      "n": 31
+    },
+    {
+      "budget_tokens": 2000,
+      "max_chunks": 5,
+      "ANY_GOLD": 0.7419354838709677,
+      "GOLD_COVERAGE": 0.6758064516129032,
+      "ALL_MAPPED_GOLD": 0.6129032258064516,
+      "mean_realized_k": 4.838709677419355,
+      "n": 31
+    },
+    {
+      "budget_tokens": 3000,
+      "max_chunks": 5,
+      "ANY_GOLD": 0.7419354838709677,
+      "GOLD_COVERAGE": 0.6758064516129032,
+      "ALL_MAPPED_GOLD": 0.6129032258064516,
+      "mean_realized_k": 4.838709677419355,
+      "n": 31
+    },
+    {
+      "budget_tokens": 4000,
+      "max_chunks": 5,
+      "ANY_GOLD": 0.7419354838709677,
+      "GOLD_COVERAGE": 0.6758064516129032,
+      "ALL_MAPPED_GOLD": 0.6129032258064516,
+      "mean_realized_k": 4.838709677419355,
+      "n": 31
+    },
+    {
+      "budget_tokens": 6000,
+      "max_chunks": 5,
+      "ANY_GOLD": 0.7419354838709677,
+      "GOLD_COVERAGE": 0.6758064516129032,
+      "ALL_MAPPED_GOLD": 0.6129032258064516,
+      "mean_realized_k": 4.838709677419355,
+      "n": 31
+    },
+    {
+      "budget_tokens": 400,
+      "max_chunks": 20,
+      "ANY_GOLD": 0.4838709677419355,
+      "GOLD_COVERAGE": 0.39623655913978495,
+      "ALL_MAPPED_GOLD": 0.3548387096774194,
+      "mean_realized_k": 1.1290322580645162,
+      "n": 31
+    },
+    {
+      "budget_tokens": 765,
+      "max_chunks": 20,
+      "ANY_GOLD": 0.5806451612903226,
+      "GOLD_COVERAGE": 0.5118279569892473,
+      "ALL_MAPPED_GOLD": 0.45161290322580644,
+      "mean_realized_k": 2.2580645161290325,
+      "n": 31
+    },
+    {
+      "budget_tokens": 1170,
+      "max_chunks": 20,
+      "ANY_GOLD": 0.6774193548387096,
+      "GOLD_COVERAGE": 0.6193548387096774,
+      "ALL_MAPPED_GOLD": 0.5806451612903226,
+      "mean_realized_k": 3.6774193548387095,
+      "n": 31
+    },
+    {
+      "budget_tokens": 1500,
+      "max_chunks": 20,
+      "ANY_GOLD": 0.7419354838709677,
+      "GOLD_COVERAGE": 0.6758064516129032,
+      "ALL_MAPPED_GOLD": 0.6129032258064516,
+      "mean_realized_k": 4.903225806451613,
+      "n": 31
+    },
+    {
+      "budget_tokens": 2000,
+      "max_chunks": 20,
+      "ANY_GOLD": 0.7419354838709677,
+      "GOLD_COVERAGE": 0.6758064516129032,
+      "ALL_MAPPED_GOLD": 0.6129032258064516,
+      "mean_realized_k": 6.580645161290323,
+      "n": 31
+    },
+    {
+      "budget_tokens": 3000,
+      "max_chunks": 20,
+      "ANY_GOLD": 0.8709677419354839,
+      "GOLD_COVERAGE": 0.7935483870967742,
+      "ALL_MAPPED_GOLD": 0.7096774193548387,
+      "mean_realized_k": 10.129032258064516,
+      "n": 31
+    },
+    {
+      "budget_tokens": 4000,
+      "max_chunks": 20,
+      "ANY_GOLD": 0.8709677419354839,
+      "GOLD_COVERAGE": 0.8225806451612904,
+      "ALL_MAPPED_GOLD": 0.7741935483870968,
+      "mean_realized_k": 13.387096774193548,
+      "n": 31
+    },
+    {
+      "budget_tokens": 6000,
+      "max_chunks": 20,
+      "ANY_GOLD": 0.8709677419354839,
+      "GOLD_COVERAGE": 0.8225806451612904,
+      "ALL_MAPPED_GOLD": 0.7741935483870968,
+      "mean_realized_k": 19.161290322580644,
+      "n": 31
+    }
+  ],
+  "per_window": [
+    {
+      "question_id": "FL01",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 613,
+      "proxy_actual_context_tokens": 454,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "CMM:p32:2",
+        "CMM:p34:0"
+      ]
+    },
+    {
+      "question_id": "FL02",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 524,
+      "proxy_actual_context_tokens": 339,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "CRM:p57:1",
+        "CRM:p58:0"
+      ]
+    },
+    {
+      "question_id": "FL03",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 441,
+      "proxy_actual_context_tokens": 406,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "CRM:p56:1",
+        "ERM:p118:0"
+      ]
+    },
+    {
+      "question_id": "FL04",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 3,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 748,
+      "proxy_actual_context_tokens": 603,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "FMM:p29:1",
+        "FMM:p41:0",
+        "FMM:p29:2"
+      ]
+    },
+    {
+      "question_id": "FL05",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 702,
+      "proxy_actual_context_tokens": 555,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "FMM:p32:0",
+        "FMM:p33:1"
+      ]
+    },
+    {
+      "question_id": "FL06",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 490,
+      "proxy_actual_context_tokens": 338,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "QMM:p33:2",
+        "QMM:p33:0"
+      ]
+    },
+    {
+      "question_id": "FL07",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 3,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 654,
+      "proxy_actual_context_tokens": 531,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "QMM:p32:5",
+        "QMM:p34:1",
+        "QMM:p32:4"
+      ]
+    },
+    {
+      "question_id": "FL08",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 602,
+      "proxy_actual_context_tokens": 499,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "QMM:p57:1",
+        "TACM:p34:1"
+      ]
+    },
+    {
+      "question_id": "FL09",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 556,
+      "proxy_actual_context_tokens": 349,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "NPM:p35:1",
+        "NPM:p54:0"
+      ]
+    },
+    {
+      "question_id": "FL10",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 468,
+      "proxy_actual_context_tokens": 425,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "NPM:p27:0",
+        "NPM:p26:3"
+      ]
+    },
+    {
+      "question_id": "FL11",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 3,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 737,
+      "proxy_actual_context_tokens": 625,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "TACM:p23:0",
+        "TACM:p1:1",
+        "TACM:p120:0"
+      ]
+    },
+    {
+      "question_id": "FL12",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 692,
+      "proxy_actual_context_tokens": 482,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "ERM:p14:0",
+        "ERM:p20:0"
+      ]
+    },
+    {
+      "question_id": "FL13",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 521,
+      "proxy_actual_context_tokens": 452,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "FMM:p265:3",
+        "EMM:p133:0"
+      ]
+    },
+    {
+      "question_id": "FL14",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 585,
+      "proxy_actual_context_tokens": 525,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "SMM:p75:0",
+        "SMM:p75:2"
+      ]
+    },
+    {
+      "question_id": "FL15",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 605,
+      "proxy_actual_context_tokens": 448,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "CMM:p32:2",
+        "CMM:p32:1"
+      ]
+    },
+    {
+      "question_id": "CN01",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 3,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 597,
+      "proxy_actual_context_tokens": 519,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "SMM:p40:0",
+        "SMM:p35:0",
+        "SMM:p21:0"
+      ]
+    },
+    {
+      "question_id": "CN02",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 688,
+      "proxy_actual_context_tokens": 593,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "QMM:p1:0",
+        "QMM:p14:0"
+      ]
+    },
+    {
+      "question_id": "CN03",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 453,
+      "proxy_actual_context_tokens": 398,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "QMM:p47:0",
+        "ERM:p14:0"
+      ]
+    },
+    {
+      "question_id": "CN04",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 559,
+      "proxy_actual_context_tokens": 441,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "SMM:p43:1",
+        "SMM:p64:1"
+      ]
+    },
+    {
+      "question_id": "PR01",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 5,
+      "stopped_by": "max_chunks",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 374,
+      "proxy_actual_context_tokens": 278,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "ERM:p103:0",
+        "ERM:p104:0",
+        "ERM:p86:0",
+        "ERM:p93:0",
+        "ERM:p106:0"
+      ]
+    },
+    {
+      "question_id": "PR02",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 640,
+      "proxy_actual_context_tokens": 538,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "SMM:p74:0",
+        "SMM:p72:0"
+      ]
+    },
+    {
+      "question_id": "PR03",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 594,
+      "proxy_actual_context_tokens": 499,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "CMM:p16:2",
+        "EMM:p101:1"
+      ]
+    },
+    {
+      "question_id": "PR04",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 462,
+      "proxy_actual_context_tokens": 389,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "SMM:p35:0",
+        "SMM:p85:2"
+      ]
+    },
+    {
+      "question_id": "PR05",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 508,
+      "proxy_actual_context_tokens": 371,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "EMM:p131:0",
+        "EMM:p107:1"
+      ]
+    },
+    {
+      "question_id": "PR06",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 548,
+      "proxy_actual_context_tokens": 448,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "ERM:p148:2",
+        "SMM:p65:3"
+      ]
+    },
+    {
+      "question_id": "CD01",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 613,
+      "proxy_actual_context_tokens": 510,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "SMM:p73:1",
+        "SMM:p85:2"
+      ]
+    },
+    {
+      "question_id": "CD02",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 697,
+      "proxy_actual_context_tokens": 569,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "EMM:p96:0",
+        "QMM:p73:0"
+      ]
+    },
+    {
+      "question_id": "CD03",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 652,
+      "proxy_actual_context_tokens": 479,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "SMM:p29:0",
+        "CMM:p46:1"
+      ]
+    },
+    {
+      "question_id": "TR01",
+      "expected": "refuse",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 459,
+      "proxy_actual_context_tokens": 373,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "QMM:p106:3",
+        "NPM:p51:3"
+      ]
+    },
+    {
+      "question_id": "TR02",
+      "expected": "refuse",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 626,
+      "proxy_actual_context_tokens": 521,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "SMM:p52:1",
+        "EMM:p145:0"
+      ]
+    },
+    {
+      "question_id": "TR03",
+      "expected": "refuse",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 599,
+      "proxy_actual_context_tokens": 468,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "FMM:p175:2",
+        "FMM:p174:1"
+      ]
+    },
+    {
+      "question_id": "TR04",
+      "expected": "refuse",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 458,
+      "proxy_actual_context_tokens": 329,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "CMM:p88:0",
+        "TACM:p20:2"
+      ]
+    },
+    {
+      "question_id": "TR05",
+      "expected": "refuse",
+      "n_hits": 20,
+      "realized_k": 3,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 639,
+      "proxy_actual_context_tokens": 542,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "NPM:p27:3",
+        "NPM:p18:1",
+        "NPM:p52:4"
+      ]
+    },
+    {
+      "question_id": "TR06",
+      "expected": "refuse",
+      "n_hits": 20,
+      "realized_k": 3,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 630,
+      "proxy_actual_context_tokens": 340,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "CMM:p15:2",
+        "ERM:p38:0",
+        "ERM:p104:0"
+      ]
+    },
+    {
+      "question_id": "TR07",
+      "expected": "refuse",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 525,
+      "proxy_actual_context_tokens": 391,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "QMM:p9:1",
+        "FMM:p214:1"
+      ]
+    },
+    {
+      "question_id": "TR08",
+      "expected": "refuse",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 681,
+      "proxy_actual_context_tokens": 579,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "FMM:p81:0",
+        "SMM:p77:0"
+      ]
+    },
+    {
+      "question_id": "ML02",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 2,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 657,
+      "proxy_actual_context_tokens": 262,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "ERM:p40:1",
+        "ERM:p130:2"
+      ]
+    },
+    {
+      "question_id": "ML03",
+      "expected": "answer",
+      "n_hits": 20,
+      "realized_k": 3,
+      "stopped_by": "budget",
+      "first_hit_alone_over_budget": false,
+      "est_context_tokens": 613,
+      "proxy_actual_context_tokens": 464,
+      "est_overbudget": false,
+      "proxy_overbudget": false,
+      "estimator_safe_but_proxy_over": false,
+      "packed_ids": [
+        "QMM:p47:0",
+        "QMM:p69:0",
+        "QMM:p45:3"
+      ]
+    }
+  ]
+}

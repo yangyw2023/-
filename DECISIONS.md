@@ -3873,3 +3873,48 @@ canonical GoldChunkMap `8cf9f3be…`、report `f48018cb…`；`CONTRACTS_VERSION
 - 执行手册_v4.md S6.0（"摘自契约"）identity 字段列表缺 `gold_chunk_map_semantics_version` 与版本拆分说明；S6.1 记录值 "CONTRACTS_VERSION 0.3.1" 与 1642 行
   "contracts v0.3.1（d30ed34）" 是 2026-09-28 的历史记录（标注为测量记录）。
 - GOLD_CHUNK_MAP_SEMANTICS_VERSION 的递增仍靠人按清单执行（无类似 builder 登记表的 AST 守卫）。
+
+
+## 2026-10-02 · S8 / M1c BM25 component closure
+
+**`S8_BM25_COMPONENT_STATUS = CLOSED`；`S8_OVERALL_STATUS = OPEN`。** 执行手册 S8.4 / S8.5 要求的 vector baseline、hybrid baseline、
+失败归因与 reranker L1 决策尚未完成（见本条 I），因此 S8 整体不关闭。本条只记录 BM25 component 的正式证据。
+
+### [L2] M1c BM25 检索基线（component）
+
+- owner_experiment: S8 / M1c
+- **A. 实现身份**：implementation commit `3511aa072be3b6a1e3551017418ebda8e5d5ed8d`；`components/retrievers/bm25.py`
+  sha256 `11ee5029899c3c55070de9a6fbd5622eb75f3d1c3a25c05856dd9489591c61ef`；runner `eval/run_retrieval_eval.py`
+  sha256 `2c0e9a4459950170a7a475c7fdcc1388fcf63c702fd239c32acabb673f04bc0f`。
+- **B. 冻结输入**：corpus `c89787778448d773f4fe5e00dbea328795821860412da01edda0da110425f4eb` / 3409；testset
+  `05614407a0e43a7f912ae17864892b0f069a22d1ad9d1ec2bfb7362150883e8b` / 39；GoldChunkMap
+  `8cf9f3be1b1bc296c196d1b5598c1351d456f83b1a05a6043c7b643f0fedeacc`（语义版本 0.3.1）；prereg `experiments/M1c_preregistration.md`
+  `ee0e028bdf8779ff2fe8c15e4c687635b2cf6f41104cb0bb643828a455b807ce`；`CONTRACTS_VERSION = 0.4.0`；四个 protocol digest 与 prereg §10.2 字面量一致。
+- **C. 有效性（`MEASURED`）**：39 / 39 题；answer / refuse = 31 / 8；Run A / Run B（独立进程，PYTHONHASHSEED 不同）normative artifact
+  逐字节相同（`9ce4df23…`）；`TEST_SET_TUNING_PERFORMED = NO`；`PROTOCOL_DRIFT = NO`。指标与 packing 已在 2026-10-02 由不 import runner 的
+  独立代码从保存的 top-20 重算，逐项一致。
+- **D. BM25 headline（31 道可答题，macro）**：
+
+  | 指标 | @1 | @2 | @3 | @5 | @20 |
+  |---|---|---|---|---|---|
+  | ANY_GOLD | 0.452 (14/31) | 0.548 (17/31) | 0.645 (20/31) | 0.742 (23/31) | 0.871 (27/31) |
+  | GOLD_COVERAGE | 0.364 | 0.469 | 0.576 | 0.676 | 0.823 |
+  | ALL_MAPPED_GOLD | 0.323 (10/31) | 0.419 (13/31) | 0.516 (16/31) | 0.613 (19/31) | 0.774 (24/31) |
+
+- **E. real retrieval packing（当前可执行打包契约，765 / TOP_K_CONTEXT 5）**：realized k 分布 {2: 30, 3: 7, 5: 1}（38 个非空窗口）；
+  packed ANY 0.581（18/31）、COVERAGE 0.512、ALL 0.452（14/31）；按估算器 overbudget 0。实际 token 成本**未用 tokenizer 测量**：
+  所报 actual-cost 是 `PROXY` —— S4a.9c 已实测的逐 chunk rendered token 之和，不含分隔符（每次拼接 0–1 token），代理 overbudget 0。
+  旧 corpus 顺序连续窗口的 realized k（2 / 3 / 4 / 5 = 52% / 41% / 6% / 0.8%）与真实检索窗口不同（真实窗口更集中于 k = 2）。
+- **F. 观察**：top-20 内无 gold 的可答题 = PR03、PR04、ML01、ML02。ML01（zh）结果为空，符合 prereg §8.3 的结构预测（不分词、语料无 CJK）；
+  ML02（tl）query 与 gold chunk 只共享 at / drug / test，且他加禄语小品词 `sa` 撞上英文 "SA Surveyor" —— 词面层面的多语种局限。
+- **G. 解释边界**：ALL_MAPPED_GOLD 只是 strict frozen-map-union diagnostic，不是答案证据完整性；retrieval / evidence coverage ≠ answer quality；
+  本结果**不**决定 vector / hybrid / reranker，**不**修改 numeric token contract、TOP_K_CONTEXT 或 TTFT contract。
+- **H. 延迟状态不变**：`TTFT_BUDGET_10S_STATUS = BUSINESS_ASSUMPTION_NOT_YET_CONFIRMED`；
+  `MAX_ACCEPTABLE_TTFT_EXPLORATION_CEILING = 180_SECONDS_NOT_AN_EXECUTABLE_CONTRACT`。
+- **I. S8 剩余工作**：`VECTOR_BASELINE = PENDING`（D12：先单独一轮 EMBEDDING_PROTOCOL_PROBE + 人工 model-selection 记录）；
+  `HYBRID_BASELINE = PENDING`（D13：vector protocol closure 后冻结 RRF 常数与逐路深度）；`S8_FAILURE_ATTRIBUTION = PENDING`（S8.5 十个归因标签）；
+  `RERANKER_L1_DECISION = PENDING`（D2：RERANKER_DECISION_THRESHOLD 未冻结）。→ **`S8_OVERALL_STATUS = OPEN`**。
+- 证据文件：`experiments/m1c_s8_bm25/s8_bm25_results.jsonl`（normative，首行 run identity，`9ce4df232af8c395e0749dcb2fd9c84e5376a7939ae20af7005b12d54dac3ba8`）、
+  `s8_bm25_metrics.json`（`019f6ee850bcb4788aa48d32807ccc1d61c2a570343104674004c5b37529b339`）、
+  `s8_bm25_packing.json`（`81fedf9fd7ad2a0ba46a128a8c6fbe449a2131216bb9a8e5c482164eebb65313`）、
+  `s8_bm25_run.log`（`91412c65bb5988e44651a7b7f2bbac6e89df47bb1302eb99667322872264ce3a`）。

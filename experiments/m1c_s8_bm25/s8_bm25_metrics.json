@@ -1,0 +1,1187 @@
+{
+  "validity_checks": {
+    "questions_processed": "39/39",
+    "question_order_equals_testset": true,
+    "expected_equals_testset": true,
+    "answer_refuse_population": {
+      "answer": 31,
+      "refuse": 8
+    },
+    "run_identity_keys_frozen": true,
+    "schema_valid": true,
+    "ranks_contiguous_no_duplicates_total_order": true,
+    "corpus_ordinal_and_chunk_id_valid": true,
+    "all_numbers_finite": true,
+    "kinds": [
+      [
+        "bm25_raw",
+        "bm25_saturation",
+        "bm25_saturation"
+      ]
+    ]
+  },
+  "status": "S8 fixed-k BM25 baseline metrics; recomputed from the saved normative top-20 artifact",
+  "ALL_MAPPED_GOLD_status": "STRICT_MAP_UNION_DIAGNOSTIC_WITH_KNOWN_SUPPORTING_CITATION_BIAS (not answer completeness)",
+  "CN03_CITATION_LOGIC": "ANNOTATION_CONFLICT_REQUIRES_HUMAN_REVIEW",
+  "overall_answer_31": {
+    "ANY_GOLD": {
+      "@1": {
+        "macro": 0.45161290322580644,
+        "numerator": "14",
+        "n": 31
+      },
+      "@2": {
+        "macro": 0.5483870967741935,
+        "numerator": "17",
+        "n": 31
+      },
+      "@3": {
+        "macro": 0.6451612903225806,
+        "numerator": "20",
+        "n": 31
+      },
+      "@5": {
+        "macro": 0.7419354838709677,
+        "numerator": "23",
+        "n": 31
+      },
+      "@20": {
+        "macro": 0.8709677419354839,
+        "numerator": "27",
+        "n": 31
+      }
+    },
+    "GOLD_COVERAGE": {
+      "@1": {
+        "macro": 0.3639784946236559,
+        "numerator": "677/60",
+        "n": 31
+      },
+      "@2": {
+        "macro": 0.46881720430107526,
+        "numerator": "218/15",
+        "n": 31
+      },
+      "@3": {
+        "macro": 0.5763440860215053,
+        "numerator": "268/15",
+        "n": 31
+      },
+      "@5": {
+        "macro": 0.6758064516129032,
+        "numerator": "419/20",
+        "n": 31
+      },
+      "@20": {
+        "macro": 0.8225806451612904,
+        "numerator": "51/2",
+        "n": 31
+      }
+    },
+    "ALL_MAPPED_GOLD": {
+      "@1": {
+        "macro": 0.3225806451612903,
+        "numerator": "10",
+        "n": 31
+      },
+      "@2": {
+        "macro": 0.41935483870967744,
+        "numerator": "13",
+        "n": 31
+      },
+      "@3": {
+        "macro": 0.5161290322580645,
+        "numerator": "16",
+        "n": 31
+      },
+      "@5": {
+        "macro": 0.6129032258064516,
+        "numerator": "19",
+        "n": 31
+      },
+      "@20": {
+        "macro": 0.7741935483870968,
+        "numerator": "24",
+        "n": 31
+      }
+    }
+  },
+  "english_answer_28": {
+    "ANY_GOLD": {
+      "@1": {
+        "macro": 0.5,
+        "numerator": "14",
+        "n": 28
+      },
+      "@2": {
+        "macro": 0.6071428571428571,
+        "numerator": "17",
+        "n": 28
+      },
+      "@3": {
+        "macro": 0.7142857142857143,
+        "numerator": "20",
+        "n": 28
+      },
+      "@5": {
+        "macro": 0.7857142857142857,
+        "numerator": "22",
+        "n": 28
+      },
+      "@20": {
+        "macro": 0.9285714285714286,
+        "numerator": "26",
+        "n": 28
+      }
+    },
+    "GOLD_COVERAGE": {
+      "@1": {
+        "macro": 0.4029761904761905,
+        "numerator": "677/60",
+        "n": 28
+      },
+      "@2": {
+        "macro": 0.5190476190476191,
+        "numerator": "218/15",
+        "n": 28
+      },
+      "@3": {
+        "macro": 0.638095238095238,
+        "numerator": "268/15",
+        "n": 28
+      },
+      "@5": {
+        "macro": 0.7125,
+        "numerator": "399/20",
+        "n": 28
+      },
+      "@20": {
+        "macro": 0.875,
+        "numerator": "49/2",
+        "n": 28
+      }
+    },
+    "ALL_MAPPED_GOLD": {
+      "@1": {
+        "macro": 0.35714285714285715,
+        "numerator": "10",
+        "n": 28
+      },
+      "@2": {
+        "macro": 0.4642857142857143,
+        "numerator": "13",
+        "n": 28
+      },
+      "@3": {
+        "macro": 0.5714285714285714,
+        "numerator": "16",
+        "n": 28
+      },
+      "@5": {
+        "macro": 0.6428571428571429,
+        "numerator": "18",
+        "n": 28
+      },
+      "@20": {
+        "macro": 0.8214285714285714,
+        "numerator": "23",
+        "n": 28
+      }
+    }
+  },
+  "micro_over_question_chunk_pairs_diagnostic": {
+    "@1": {
+      "overlap": 14,
+      "pairs": 47,
+      "micro": 0.2978723404255319
+    },
+    "@2": {
+      "overlap": 19,
+      "pairs": 47,
+      "micro": 0.40425531914893614
+    },
+    "@3": {
+      "overlap": 23,
+      "pairs": 47,
+      "micro": 0.48936170212765956
+    },
+    "@5": {
+      "overlap": 28,
+      "pairs": 47,
+      "micro": 0.5957446808510638
+    },
+    "@20": {
+      "overlap": 38,
+      "pairs": 47,
+      "micro": 0.8085106382978723
+    }
+  },
+  "structural_ceilings": {
+    "@1": {
+      "ALL_MAPPED_GOLD_structural_ceiling": "21/31",
+      "unreachable": [
+        "FL06",
+        "FL07",
+        "CN03",
+        "PR01",
+        "PR03",
+        "PR06",
+        "CD01",
+        "CD02",
+        "CD03",
+        "ML02"
+      ]
+    },
+    "@2": {
+      "ALL_MAPPED_GOLD_structural_ceiling": "28/31",
+      "unreachable": [
+        "FL06",
+        "FL07",
+        "CD01"
+      ]
+    },
+    "@3": {
+      "ALL_MAPPED_GOLD_structural_ceiling": "29/31",
+      "unreachable": [
+        "FL06",
+        "CD01"
+      ]
+    },
+    "@5": {
+      "ALL_MAPPED_GOLD_structural_ceiling": "31/31",
+      "unreachable": []
+    },
+    "@20": {
+      "ALL_MAPPED_GOLD_structural_ceiling": "31/31",
+      "unreachable": []
+    }
+  },
+  "first_gold_rank_distribution_answer_31": {
+    "1": 14,
+    "2": 3,
+    "3": 3,
+    "4-5": 3,
+    "6-20": 4,
+    "none_in_top20": 4
+  },
+  "non_english_per_item": [
+    {
+      "question_id": "ML01",
+      "language": "zh",
+      "gold_count": 1,
+      "first_gold_rank": null,
+      "gold_ranks": [],
+      "n_hits": 0,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "0",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 0,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "ML02",
+      "language": "tl",
+      "gold_count": 2,
+      "first_gold_rank": null,
+      "gold_ranks": [],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "0",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 0,
+      "structural_unreachable_ALL": [
+        1
+      ]
+    },
+    {
+      "question_id": "ML03",
+      "language": "hi",
+      "gold_count": 1,
+      "first_gold_rank": 4,
+      "gold_ranks": [
+        4
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    }
+  ],
+  "pairs_descriptive": [
+    {
+      "pair_id": "P-dpa-notify",
+      "members": [
+        {
+          "question_id": "FL12",
+          "language": "en",
+          "gold_count": 1,
+          "first_gold_rank": 1,
+          "COVERAGE@1": "1",
+          "COVERAGE@2": "1",
+          "COVERAGE@3": "1",
+          "COVERAGE@5": "1",
+          "COVERAGE@20": "1"
+        },
+        {
+          "question_id": "ML03",
+          "language": "hi",
+          "gold_count": 1,
+          "first_gold_rank": 4,
+          "COVERAGE@1": "0",
+          "COVERAGE@2": "0",
+          "COVERAGE@3": "0",
+          "COVERAGE@5": "1",
+          "COVERAGE@20": "1"
+        }
+      ],
+      "pair_gold_mismatch_flag": false,
+      "comparison": "descriptive_only"
+    },
+    {
+      "pair_id": "P-drug-freq",
+      "members": [
+        {
+          "question_id": "FL06",
+          "language": "en",
+          "gold_count": 4,
+          "first_gold_rank": 1,
+          "COVERAGE@1": "1/4",
+          "COVERAGE@2": "1/2",
+          "COVERAGE@3": "1/2",
+          "COVERAGE@5": "3/4",
+          "COVERAGE@20": "1"
+        },
+        {
+          "question_id": "ML02",
+          "language": "tl",
+          "gold_count": 2,
+          "first_gold_rank": null,
+          "COVERAGE@1": "0",
+          "COVERAGE@2": "0",
+          "COVERAGE@3": "0",
+          "COVERAGE@5": "0",
+          "COVERAGE@20": "0"
+        }
+      ],
+      "pair_gold_mismatch_flag": true,
+      "comparison": "descriptive_only"
+    },
+    {
+      "pair_id": "P-master-handover",
+      "members": [
+        {
+          "question_id": "FL01",
+          "language": "en",
+          "gold_count": 1,
+          "first_gold_rank": 1,
+          "COVERAGE@1": "1",
+          "COVERAGE@2": "1",
+          "COVERAGE@3": "1",
+          "COVERAGE@5": "1",
+          "COVERAGE@20": "1"
+        },
+        {
+          "question_id": "ML01",
+          "language": "zh",
+          "gold_count": 1,
+          "first_gold_rank": null,
+          "COVERAGE@1": "0",
+          "COVERAGE@2": "0",
+          "COVERAGE@3": "0",
+          "COVERAGE@5": "0",
+          "COVERAGE@20": "0"
+        }
+      ],
+      "pair_gold_mismatch_flag": false,
+      "comparison": "descriptive_only"
+    }
+  ],
+  "refuse_trap_per_item": [
+    {
+      "question_id": "TR01",
+      "type": "trap",
+      "trap_subtype": "absent_with_distractor",
+      "excluded_from_primary_trap": false,
+      "empty_result": false,
+      "n_hits": 20,
+      "max_match_score": 0.5811750600981916,
+      "top1_doc_id": "QMM"
+    },
+    {
+      "question_id": "TR02",
+      "type": "trap",
+      "trap_subtype": "absent_no_hit",
+      "excluded_from_primary_trap": true,
+      "empty_result": false,
+      "n_hits": 20,
+      "max_match_score": 0.684450657336873,
+      "top1_doc_id": "SMM"
+    },
+    {
+      "question_id": "TR03",
+      "type": "trap",
+      "trap_subtype": "absent_with_distractor",
+      "excluded_from_primary_trap": false,
+      "empty_result": false,
+      "n_hits": 20,
+      "max_match_score": 0.6976430971991606,
+      "top1_doc_id": "FMM"
+    },
+    {
+      "question_id": "TR04",
+      "type": "trap",
+      "trap_subtype": "absent_with_distractor",
+      "excluded_from_primary_trap": false,
+      "empty_result": false,
+      "n_hits": 20,
+      "max_match_score": 0.6259404236727674,
+      "top1_doc_id": "CMM"
+    },
+    {
+      "question_id": "TR05",
+      "type": "trap",
+      "trap_subtype": "absent_no_hit",
+      "excluded_from_primary_trap": false,
+      "empty_result": false,
+      "n_hits": 20,
+      "max_match_score": 0.638836037691105,
+      "top1_doc_id": "NPM"
+    },
+    {
+      "question_id": "TR06",
+      "type": "trap",
+      "trap_subtype": "absent_no_hit",
+      "excluded_from_primary_trap": false,
+      "empty_result": false,
+      "n_hits": 20,
+      "max_match_score": 0.6341958624753293,
+      "top1_doc_id": "CMM"
+    },
+    {
+      "question_id": "TR07",
+      "type": "trap",
+      "trap_subtype": "absent_with_distractor",
+      "excluded_from_primary_trap": false,
+      "empty_result": false,
+      "n_hits": 20,
+      "max_match_score": 0.5294641590434965,
+      "top1_doc_id": "QMM"
+    },
+    {
+      "question_id": "TR08",
+      "type": "trap",
+      "trap_subtype": "absent_with_distractor",
+      "excluded_from_primary_trap": false,
+      "empty_result": false,
+      "n_hits": 20,
+      "max_match_score": 0.6235160629683949,
+      "top1_doc_id": "FMM"
+    }
+  ],
+  "primary_trap_denominator": 7,
+  "empty_result_question_ids": [
+    "ML01"
+  ],
+  "per_item_answer": [
+    {
+      "question_id": "FL01",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL02",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL03",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL04",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 3,
+      "gold_ranks": [
+        3
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL05",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL06",
+      "language": "en",
+      "gold_count": 4,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1,
+        2,
+        5,
+        8
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1/4",
+      "COVERAGE@2": "1/2",
+      "COVERAGE@3": "1/2",
+      "COVERAGE@5": "3/4",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "question_id": "FL07",
+      "language": "en",
+      "gold_count": 3,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1,
+        3,
+        4
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1/3",
+      "COVERAGE@2": "1/3",
+      "COVERAGE@3": "2/3",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": [
+        1,
+        2
+      ]
+    },
+    {
+      "question_id": "FL08",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL09",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL10",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL11",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL12",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL13",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 3,
+      "gold_ranks": [
+        3
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL14",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 5,
+      "gold_ranks": [
+        5
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "FL15",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 1,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "CN01",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 2,
+      "gold_ranks": [
+        2
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "CN02",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 7,
+      "gold_ranks": [
+        7
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "CN03",
+      "language": "en",
+      "gold_count": 2,
+      "first_gold_rank": 2,
+      "gold_ranks": [
+        2
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "1/2",
+      "COVERAGE@3": "1/2",
+      "COVERAGE@5": "1/2",
+      "COVERAGE@20": "1/2",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 0,
+      "structural_unreachable_ALL": [
+        1
+      ]
+    },
+    {
+      "question_id": "CN04",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 9,
+      "gold_ranks": [
+        9
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "PR01",
+      "language": "en",
+      "gold_count": 2,
+      "first_gold_rank": 19,
+      "gold_ranks": [
+        19
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "1/2",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 0,
+      "structural_unreachable_ALL": [
+        1
+      ]
+    },
+    {
+      "question_id": "PR02",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 2,
+      "gold_ranks": [
+        2
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "PR03",
+      "language": "en",
+      "gold_count": 2,
+      "first_gold_rank": null,
+      "gold_ranks": [],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "0",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 0,
+      "structural_unreachable_ALL": [
+        1
+      ]
+    },
+    {
+      "question_id": "PR04",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": null,
+      "gold_ranks": [],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "0",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 0,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "PR05",
+      "language": "en",
+      "gold_count": 1,
+      "first_gold_rank": 3,
+      "gold_ranks": [
+        3
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "PR06",
+      "language": "en",
+      "gold_count": 2,
+      "first_gold_rank": 5,
+      "gold_ranks": [
+        5
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "1/2",
+      "COVERAGE@20": "1/2",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 0,
+      "structural_unreachable_ALL": [
+        1
+      ]
+    },
+    {
+      "question_id": "CD01",
+      "language": "en",
+      "gold_count": 5,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1,
+        8,
+        10,
+        11,
+        12
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1/5",
+      "COVERAGE@2": "1/5",
+      "COVERAGE@3": "1/5",
+      "COVERAGE@5": "1/5",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "question_id": "CD02",
+      "language": "en",
+      "gold_count": 2,
+      "first_gold_rank": 1,
+      "gold_ranks": [
+        1,
+        2
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "1/2",
+      "COVERAGE@2": "1",
+      "COVERAGE@3": "1",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 1,
+      "ALL@3": 1,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": [
+        1
+      ]
+    },
+    {
+      "question_id": "CD03",
+      "language": "en",
+      "gold_count": 2,
+      "first_gold_rank": 8,
+      "gold_ranks": [
+        8,
+        12
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": [
+        1
+      ]
+    },
+    {
+      "question_id": "ML01",
+      "language": "zh",
+      "gold_count": 1,
+      "first_gold_rank": null,
+      "gold_ranks": [],
+      "n_hits": 0,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "0",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 0,
+      "structural_unreachable_ALL": []
+    },
+    {
+      "question_id": "ML02",
+      "language": "tl",
+      "gold_count": 2,
+      "first_gold_rank": null,
+      "gold_ranks": [],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "0",
+      "COVERAGE@20": "0",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 0,
+      "ALL@20": 0,
+      "structural_unreachable_ALL": [
+        1
+      ]
+    },
+    {
+      "question_id": "ML03",
+      "language": "hi",
+      "gold_count": 1,
+      "first_gold_rank": 4,
+      "gold_ranks": [
+        4
+      ],
+      "n_hits": 20,
+      "COVERAGE@1": "0",
+      "COVERAGE@2": "0",
+      "COVERAGE@3": "0",
+      "COVERAGE@5": "1",
+      "COVERAGE@20": "1",
+      "ALL@1": 0,
+      "ALL@2": 0,
+      "ALL@3": 0,
+      "ALL@5": 1,
+      "ALL@20": 1,
+      "structural_unreachable_ALL": []
+    }
+  ],
+  "known_distractor_rank": "NOT_DEFINED"
+}
